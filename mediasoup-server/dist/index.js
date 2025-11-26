@@ -45,6 +45,14 @@ async function setupMediasoup() {
 await setupMediasoup();
 const wss = new WebSocketServer({ port: config.serverPort });
 console.log(`[SERVER] WS running on port ${config.serverPort}`);
+// Keep-alive interval to prevent load balancer timeouts
+setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ action: "heartbeat" }));
+        }
+    });
+}, 25000);
 wss.on("connection", (ws, req) => {
     // const clientId = crypto.randomUUID(); // This clientId is for the WS connection, not the client in the room
     // console.log("[SERVER] Client connected:", clientId);
@@ -221,7 +229,12 @@ wss.on("connection", (ws, req) => {
                     }));
                 }
                 catch (error) {
-                    console.error("Restart ICE error:", error);
+                    if (error.message.includes("not found")) {
+                        console.warn(`[SERVER] Restart ICE failed: ${error.message} (Client might have disconnected)`);
+                    }
+                    else {
+                        console.error("[SERVER] Restart ICE error:", error);
+                    }
                 }
             }
             if (action === "produce") {
@@ -268,7 +281,7 @@ wss.on("connection", (ws, req) => {
                 status: "ended",
             })
                 .catch((err) => {
-                console.error("[SERVER] Failed to notify backend of stream end:", err.message);
+                console.error(`[SERVER] Failed to notify backend of stream end: ${err.message}. Check LARAVEL_API_URL in .env`);
             });
             const room = rooms.get(currentRoomId);
             if (room) {

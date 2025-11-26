@@ -7,7 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 class Room extends Model
 {
     //
-    protected $fillable = ['name', 'slug', 'created_by', 'active'];
+    protected $fillable = ['name', 'created_by', 'active', 'status', 'started_at', 'ended_at'];
+
+    protected $casts = [
+        'started_at' => 'datetime',
+        'ended_at' => 'datetime',
+        'active' => 'boolean',
+    ];
 
     public function creator()
     {

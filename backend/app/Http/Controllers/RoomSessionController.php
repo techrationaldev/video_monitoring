@@ -17,6 +17,13 @@ class RoomSessionController extends Controller
             ['created_by' => auth()->id() ?? 1, 'active' => true]
         );
 
+        // Update room status to live
+        $room->update([
+            'status' => 'live',
+            'started_at' => now(),
+            'ended_at' => null,
+        ]);
+
         $session = RoomSession::create([
             'room_id' => $room->id,
             'user_id' => auth()->id(), // Nullable if guest

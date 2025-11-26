@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Internal;
 
 use App\Http\Controllers\Controller;
 use App\Models\RoomSession;
+use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -35,6 +36,16 @@ class StreamStatusController extends Controller
                     'is_active' => false,
                     'left_at' => now(),
                 ]);
+
+                // Also update the Room status
+                $room = Room::find($session->room_id);
+                if ($room) {
+                    $room->update([
+                        'status' => 'offline',
+                        'ended_at' => now(),
+                    ]);
+                }
+
                 Log::info("Session {$session->id} marked as ended.");
             }
         } else {

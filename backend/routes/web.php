@@ -14,9 +14,8 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::get('dashboard', function () {
         // Only show rooms that have active sessions
-        $rooms = \App\Models\Room::whereHas('sessions', function ($q) {
-            $q->where('is_active', true);
-        })->get();
+        // Only show rooms that are live
+        $rooms = \App\Models\Room::where('status', 'live')->get();
         return Inertia::render('dashboard', [
             'rooms' => $rooms
         ]);

@@ -26,5 +26,12 @@ Route::middleware(['web'])->group(function () {
     Route::post('/room-sessions/{id}/leave', [RoomSessionController::class, 'leave']);
 });
 
-// Internal APIs (Should be protected by IP or secret in production)
-Route::post('/internal/stream-status', [App\Http\Controllers\Internal\StreamStatusController::class, 'update']);
+// Internal APIs (Protected by Shared Secret)
+Route::middleware(['internal.auth'])->prefix('internal')->group(function () {
+    Route::post('/stream-status', [App\Http\Controllers\Internal\StreamStatusController::class, 'update']);
+    Route::post('/stream-status/reset', [App\Http\Controllers\Internal\StreamStatusController::class, 'reset']);
+
+    // Recording callbacks
+    Route::post('/recording/start', [App\Http\Controllers\RecordingController::class, 'internalStart']);
+    Route::post('/recording/stop', [App\Http\Controllers\RecordingController::class, 'internalStop']);
+});

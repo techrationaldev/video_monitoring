@@ -54,4 +54,23 @@ class StreamStatusController extends Controller
 
         return response()->json(['status' => 'ok']);
     }
+    public function reset()
+    {
+        Log::info('Resetting all stream statuses to offline (Server Restart).');
+
+        $affected = Room::where('status', 'live')->update([
+            'status' => 'offline',
+            'ended_at' => now(),
+        ]);
+
+        // Also close any active sessions
+        RoomSession::where('is_active', true)->update([
+            'is_active' => false,
+            'left_at' => now(),
+        ]);
+
+        Log::info("Reset complete. {$affected} rooms marked as offline.");
+
+        return response()->json(['status' => 'ok', 'reset_count' => $affected]);
+    }
 }

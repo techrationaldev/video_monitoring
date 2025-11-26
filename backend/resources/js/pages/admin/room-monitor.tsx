@@ -48,6 +48,7 @@ export function RoomMonitor({
     const [connectionStatus, setConnectionStatus] = useState<
         'connected' | 'disconnected' | 'reconnecting'
     >('disconnected');
+    const [isInterrupted, setIsInterrupted] = useState(false);
 
     useEffect(() => {
         let ws: WebSocket | null = null;
@@ -126,6 +127,13 @@ export function RoomMonitor({
                     case 'restart-ice-done':
                         await handleRestartIceDone(data);
                         break;
+
+                    case 'stream-interrupted':
+                        console.warn(
+                            '[ADMIN] Stream interrupted (network drop?)',
+                        );
+                        setIsInterrupted(true);
+                        break;
                 }
             };
 
@@ -146,6 +154,13 @@ export function RoomMonitor({
         return () => {
             if (ws) ws.close();
             clearTimeout(reconnectTimeout);
+
+            // Reset refs on unmount/change
+            deviceRef.current = null;
+            recvTransportRef.current = null;
+            consumersRef.current = new Map();
+            pendingProducersRef.current = [];
+            setStreams([]);
         };
     }, [roomId]);
 
@@ -258,6 +273,9 @@ export function RoomMonitor({
             ...prev,
             { id: consumer.id, producerId, track: consumer.track },
         ]);
+
+        // If we successfully consumed, the stream is back
+        setIsInterrupted(false);
 
         console.log(`Consuming ${kind} from producer ${producerId}`);
         console.log(`Consuming ${kind} from producer ${producerId}`);
@@ -376,6 +394,17 @@ export function RoomMonitor({
                                     <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
                                 </span>
                             </div>
+
+                            {isInterrupted && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                                    <div className="flex flex-col items-center gap-2 text-yellow-500">
+                                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-yellow-500 border-t-transparent"></div>
+                                        <span className="font-bold">
+                                            Reconnecting...
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="p-4">
                             <div className="flex items-center justify-between">

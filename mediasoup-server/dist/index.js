@@ -43,6 +43,19 @@ async function setupMediasoup() {
     }
 }
 await setupMediasoup();
+// Reset stream statuses in DB on startup
+try {
+    console.log("[SERVER] Resetting stream statuses in backend...");
+    await axios.post(`${config.laravelApiUrl}/internal/stream-status/reset`, {}, {
+        headers: {
+            "X-Internal-Secret": config.internalApiSecret,
+        },
+    });
+    console.log("[SERVER] Stream statuses reset successfully.");
+}
+catch (error) {
+    console.error(`[SERVER] Failed to reset stream statuses: ${error.message}`);
+}
 const wss = new WebSocketServer({ port: config.serverPort });
 console.log(`[SERVER] WS running on port ${config.serverPort}`);
 const pendingRemovals = new Map();
@@ -122,6 +135,25 @@ wss.on("connection", (ws, req) => {
                     console.log(`[SERVER] Client ${clientId} reconnected (streamer)`);
                     clearTimeout(pendingRemovals.get(clientId));
                     pendingRemovals.delete(clientId);
+                }
+                // Clean up any existing session for this client to prevent ghost state
+                // This ensures we don't have lingering transports/producers if they crashed and came back
+                const removedProducerIds = room.removeClient(clientId);
+                if (removedProducerIds.length > 0) {
+                    console.log(`[SERVER] Cleaned up old session for ${clientId}`);
+                    // Notify admins that the old producer is gone (so they can consume the new one)
+                    // Actually, we can just let the new producer flow handle it, but sending producer-closed is safer
+                    for (const producerId of removedProducerIds) {
+                        for (const [otherClientId, otherWs] of room.clients) {
+                            if (otherClientId !== clientId &&
+                                otherWs.readyState === WebSocket.OPEN) {
+                                otherWs.send(JSON.stringify({
+                                    action: "producer-closed",
+                                    data: { producerId },
+                                }));
+                            }
+                        }
+                    }
                 }
                 room.addClient(clientId, ws);
                 ws.send(JSON.stringify({
@@ -266,28 +298,22 @@ wss.on("connection", (ws, req) => {
                 await room.connectTransport(data.transportId, data.dtlsParameters);
                 ws.send(JSON.stringify({ action: "transport-connected" }));
             }
-            if (action === "restart-ice") {
-                if (!data.transportId) {
-                    console.error("Missing transportId for restart-ice");
-                    return;
-                }
-                try {
-                    const iceParameters = await room.restartIce(data.transportId);
+            switch (action) {
+                case "restart-ice": {
+                    const { transportId } = data;
+                    const room = rooms.get(currentRoomId);
+                    if (!room) {
+                        throw new Error(`Room ${currentRoomId} not found`);
+                    }
+                    const iceParameters = await room.restartIce(transportId);
                     ws.send(JSON.stringify({
                         action: "restart-ice-done",
                         data: {
-                            transportId: data.transportId,
+                            transportId,
                             iceParameters,
                         },
                     }));
-                }
-                catch (error) {
-                    if (error.message.includes("not found")) {
-                        console.warn(`[SERVER] Restart ICE failed: ${error.message} (Client might have disconnected)`);
-                    }
-                    else {
-                        console.error("[SERVER] Restart ICE error:", error);
-                    }
+                    break;
                 }
             }
             if (action === "produce") {
@@ -327,8 +353,34 @@ wss.on("connection", (ws, req) => {
     ws.on("close", () => {
         if (currentRoomId && currentClientId) {
             console.log(`[SERVER] Client disconnected: ${currentClientId} from room ${currentRoomId}. Waiting for reconnect...`);
+            // Check if client was a streamer (had producers)
+            const room = rooms.get(currentRoomId);
+            let isStreamer = false;
+            if (room) {
+                for (const producer of room.producers.values()) {
+                    if (producer.appData.clientId === currentClientId) {
+                        isStreamer = true;
+                        break;
+                    }
+                }
+            }
+            const gracePeriod = isStreamer ? 60000 : 5000; // 60s for streamer, 5s for viewer
+            if (isStreamer) {
+                console.log(`[SERVER] Streamer ${currentClientId} disconnected. Waiting ${gracePeriod}ms...`);
+                // Notify admins of interruption
+                const payload = JSON.stringify({
+                    action: "stream-interrupted",
+                    roomId: currentRoomId,
+                    clientId: currentClientId,
+                });
+                for (const adminWs of adminClients) {
+                    if (adminWs.readyState === WebSocket.OPEN) {
+                        adminWs.send(payload);
+                    }
+                }
+            }
             const timeout = setTimeout(() => {
-                console.log(`[SERVER] Removing client ${currentClientId} after timeout`);
+                console.log(`[SERVER] Removing client ${currentClientId} after timeout (${isStreamer ? "streamer" : "viewer"})`);
                 pendingRemovals.delete(currentClientId);
                 // Notify Laravel backend that stream ended
                 axios
@@ -336,6 +388,10 @@ wss.on("connection", (ws, req) => {
                     roomId: currentRoomId,
                     clientId: currentClientId,
                     status: "ended",
+                }, {
+                    headers: {
+                        "X-Internal-Secret": config.internalApiSecret,
+                    },
                 })
                     .catch((err) => {
                     console.error(`[SERVER] Failed to notify backend of stream end: ${err.message}. Check LARAVEL_API_URL in .env`);
@@ -369,8 +425,10 @@ wss.on("connection", (ws, req) => {
                             }
                         }
                     }
+                    // Update active rooms list for admins (remove the room if empty)
+                    broadcastActiveRooms();
                 }
-            }, 5000); // 5 second grace period
+            }, gracePeriod); // Dynamic grace period
             pendingRemovals.set(currentClientId, timeout);
         }
     });

@@ -11,4 +11,5 @@ export const config = {
     turnUsername: process.env.TURN_USERNAME || "user",
     turnPassword: process.env.TURN_PASSWORD || "pass",
     laravelApiUrl: process.env.LARAVEL_API_URL || "http://127.0.0.1:8000/api",
+    internalApiSecret: process.env.INTERNAL_API_SECRET || "",
 };

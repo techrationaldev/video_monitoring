@@ -123,4 +123,15 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Internal API Secret
+    |--------------------------------------------------------------------------
+    |
+    | Shared secret for securing internal server-to-server communication
+    | (e.g., Mediasoup Server -> Laravel).
+    |
+    */
+    'internal_api_secret' => env('INTERNAL_API_SECRET'),
+
 ];

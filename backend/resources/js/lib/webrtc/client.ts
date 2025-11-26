@@ -29,8 +29,8 @@ export class ClientWebRTC {
 
     onMessage(callback: (data: any) => void) {
         this.ws.onmessage = (msg) => {
-            console.log('[CLIENT] WS MESSAGE RAW:', msg.data);
             const data = JSON.parse(msg.data);
+            console.log(`[CLIENT] WS RECV: ${data.action}`, data);
 
             if (data.action === 'restart-ice-done') {
                 this.handleRestartIceDone(data.data);
@@ -42,7 +42,7 @@ export class ClientWebRTC {
 
     send(data: any) {
         const msg = { ...data, clientId: this.clientId };
-        console.log('[CLIENT] WS SEND:', msg);
+        console.log(`[CLIENT] WS SEND: ${data.action}`, msg);
         this.ws.send(JSON.stringify(msg));
     }
 
@@ -133,11 +133,12 @@ export class ClientWebRTC {
             'connectionstatechange',
             async (state: string) => {
                 console.log(
-                    '[CLIENT] Transport connection state changed:',
-                    state,
+                    `[CLIENT] Send Transport connection state changed: ${state}`,
                 );
                 if (state === 'failed' || state === 'disconnected') {
-                    console.log('[CLIENT] Transport failed, restarting ICE...');
+                    console.warn(
+                        '[CLIENT] Transport failed/disconnected, triggering ICE restart...',
+                    );
                     this.restartIce(this.sendTransport.id);
                 }
             },

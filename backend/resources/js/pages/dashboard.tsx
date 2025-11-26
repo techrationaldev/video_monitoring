@@ -38,18 +38,20 @@ export default function Dashboard({
             console.log('Connected to Mediasoup for Dashboard updates');
             setIsConnected(true);
             // Join as admin to receive updates
-            ws.send(
-                JSON.stringify({
-                    action: 'join-as-admin',
-                    roomId: 'admin-dashboard', // Dummy room ID
-                }),
-            );
+            const payload = {
+                action: 'join-as-admin',
+                roomId: 'admin-dashboard', // Dummy room ID
+            };
+            console.log('Sending join-as-admin:', payload);
+            ws.send(JSON.stringify(payload));
         };
 
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
+                console.log('Dashboard received WS message:', msg);
                 if (msg.action === 'active-rooms') {
+                    console.log('Updating rooms list:', msg.data);
                     setRooms(msg.data);
                 }
             } catch (error) {

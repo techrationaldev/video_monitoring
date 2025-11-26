@@ -120,6 +120,12 @@ wss.on("connection", (ws: WebSocket, req) => {
       const msg = JSON.parse(message);
       const { action, roomId, clientId, data } = msg as WebSocketMessage; // Cast msg to WebSocketMessage
 
+      console.log(
+        `[SERVER] Received action: ${action} | Room: ${roomId} | Client: ${
+          clientId || "N/A"
+        }`
+      );
+
       if (!roomId) {
         console.error("Missing roomId");
         return;
@@ -133,13 +139,18 @@ wss.on("connection", (ws: WebSocket, req) => {
       const room = rooms.getOrCreate(roomId, router);
 
       if (action === "join-as-admin") {
-        console.log("[SERVER] Admin joined dashboard");
+        console.log(
+          `[SERVER] Admin joined dashboard. Total admins: ${
+            adminClients.size + 1
+          }`
+        );
         adminClients.add(ws);
 
         // Send immediate update
         broadcastActiveRooms();
 
         ws.on("close", () => {
+          console.log("[SERVER] Admin disconnected from dashboard");
           adminClients.delete(ws);
         });
         return;
@@ -410,6 +421,7 @@ wss.on("connection", (ws: WebSocket, req) => {
       }
     } catch (error) {
       console.error("[SERVER] Error handling message:", error);
+      console.error("[SERVER] Message content:", message);
     }
   });
 

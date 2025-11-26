@@ -60,21 +60,22 @@ export function RoomMonitor({
             wsRef.current = ws;
 
             ws.onopen = () => {
-                console.log('Connected to Mediasoup Server');
+                console.log('[ADMIN] Connected to Mediasoup Server');
                 setConnectionStatus('connected');
                 // Join as viewer
-                ws?.send(
-                    JSON.stringify({
-                        action: 'join-as-viewer',
-                        roomId: roomId,
-                        clientId: clientIdRef.current,
-                    }),
-                );
+                const payload = {
+                    action: 'join-as-viewer',
+                    roomId: roomId,
+                    clientId: clientIdRef.current,
+                };
+                console.log('[ADMIN] Sending join-as-viewer:', payload);
+                ws?.send(JSON.stringify(payload));
             };
 
             ws.onmessage = async (event) => {
                 const msg = JSON.parse(event.data);
                 const { action, data } = msg;
+                console.log(`[ADMIN] WS RECV: ${action}`, data);
 
                 switch (action) {
                     case 'router-rtp-capabilities':
@@ -129,13 +130,13 @@ export function RoomMonitor({
             };
 
             ws.onclose = () => {
-                console.log('WS Closed, reconnecting in 3s...');
+                console.log('[ADMIN] WS Closed, reconnecting in 3s...');
                 setConnectionStatus('reconnecting');
                 reconnectTimeout = setTimeout(connect, 3000);
             };
 
             ws.onerror = (err) => {
-                console.error('WS Error:', err);
+                console.error('[ADMIN] WS Error:', err);
                 ws?.close();
             };
         };

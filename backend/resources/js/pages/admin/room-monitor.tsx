@@ -55,7 +55,9 @@ export function RoomMonitor({
     const wsRef = useRef<WebSocket | null>(null);
     const recvTransportRef = useRef<any>(null);
     const consumersRef = useRef<Map<string, any>>(new Map());
-    const pendingProducersRef = useRef<string[]>([]);
+    const pendingProducersRef = useRef<
+        { producerId: string; clientId: string }[]
+    >([]);
     const clientIdRef = useRef<string>('');
 
     if (!clientIdRef.current) {
@@ -239,14 +241,11 @@ export function RoomMonitor({
             console.log(
                 `Processing ${pendingProducersRef.current.length} pending producers`,
             );
-            for (const producerId of pendingProducersRef.current) {
-                // We need to store clientId in pendingProducersRef to pass it here
-                // For now, let's just pass 'unknown' if we don't have it, or better,
-                // we should have stored it.
-                // Since I didn't update pendingProducersRef type yet, I'll pass 'unknown'
-                // and rely on the map if it was set earlier? No, map is set inside consumeProducer.
-                // This is a gap. But for now to fix lint:
-                consumeProducer(producerId, 'unknown');
+            for (const {
+                producerId,
+                clientId,
+            } of pendingProducersRef.current) {
+                consumeProducer(producerId, clientId);
             }
             pendingProducersRef.current = [];
         }
@@ -256,12 +255,11 @@ export function RoomMonitor({
         const device = deviceRef.current;
         const transport = recvTransportRef.current;
         if (!device || !transport) {
-            console.warn(producerId);
-            // Store clientId in pending for later? Or just retry logic needs to be smarter.
-            // For now, let's assume if transport isn't ready, we might lose the clientId context in this simple retry queue.
-            // Ideally we should store { producerId, clientId } in pending.
-            // pendingProducersRef.current.push({ producerId, clientId });
-            // BUT for simplicity in this refactor, I'll skip complex pending logic update and assume transport is ready usually.
+            console.warn(
+                'Device or transport not ready to consume, queueing producer',
+                producerId,
+            );
+            pendingProducersRef.current.push({ producerId, clientId });
             return;
         }
 
@@ -420,20 +418,7 @@ export function RoomMonitor({
                           : 'Disconnected'}
                 </span>
             </div>
-
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {streams.length === 0 && (
-                    <div className="col-span-full flex h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-                        <div className="mb-4 h-12 w-12 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
-                        <p className="text-lg font-medium">
-                            Waiting for streams...
-                        </p>
-                        <p className="text-sm">
-                            Streams will appear here automatically
-                        </p>
-                    </div>
-                )}
-
                 {Object.keys(clientStreams).length === 0 && (
                     <div className="col-span-full flex h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
                         <div className="mb-4 h-12 w-12 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
@@ -589,7 +574,7 @@ export function RoomMonitor({
     );
 }
 
-const VideoPlayer = ({
+function VideoPlayer({
     track,
     controls = true,
     muted = true,
@@ -597,7 +582,7 @@ const VideoPlayer = ({
     track: MediaStreamTrack;
     controls?: boolean;
     muted?: boolean;
-}) => {
+}) {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
@@ -618,15 +603,15 @@ const VideoPlayer = ({
             className="h-full w-full object-cover"
         />
     );
-};
+}
 
-const AudioPlayer = ({
+function AudioPlayer({
     track,
     muted,
 }: {
     track: MediaStreamTrack;
     muted: boolean;
-}) => {
+}) {
     const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
@@ -638,4 +623,4 @@ const AudioPlayer = ({
     }, [track]);
 
     return <audio ref={audioRef} autoPlay muted={muted} />;
-};
+}

@@ -35,7 +35,9 @@ export function RoomMonitor({
     const clientIdRef = useRef<string>(crypto.randomUUID());
 
     useEffect(() => {
-        const ws = new WebSocket('ws://localhost:5005');
+        const wsUrl =
+            import.meta.env.VITE_MEDIASOUP_WS_URL || 'ws://localhost:5005';
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {

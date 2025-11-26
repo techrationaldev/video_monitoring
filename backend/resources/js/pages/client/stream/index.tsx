@@ -25,7 +25,8 @@ export default function ClientStreamPage() {
 
                 // 2. Connect to Mediasoup
                 const client = new ClientWebRTC(
-                    'ws://localhost:5005',
+                    import.meta.env.VITE_MEDIASOUP_WS_URL ||
+                        'ws://localhost:5005',
                     roomId,
                     connectionId,
                 );

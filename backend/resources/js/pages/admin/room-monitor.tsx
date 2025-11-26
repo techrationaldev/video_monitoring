@@ -85,6 +85,9 @@ export function RoomMonitor({
     roomId,
     variant = 'full',
 }: Props & { variant?: 'full' | 'card' }) {
+    useEffect(() => {
+        console.log('[ADMIN] RoomMonitor v2.1 loaded');
+    }, []);
     const [tracks, setTracks] = useState<MediaTrack[]>([]);
     const [activeAudioClientId, setActiveAudioClientId] = useState<
         string | null
@@ -205,6 +208,13 @@ export function RoomMonitor({
                         await handleRestartIceDone(data);
                         break;
 
+                    case 'session-ended':
+                        console.warn(
+                            '[ADMIN] Session ended by server, reloading...',
+                        );
+                        window.location.reload();
+                        break;
+
                     case 'stream-interrupted':
                         console.warn(
                             '[ADMIN] Stream interrupted (network drop?)',
@@ -281,18 +291,21 @@ export function RoomMonitor({
             callback();
         });
 
-        transport.on('connectionstatechange', (state: string) => {
+        transport.on('connectionstatechange', (state) => {
             console.log(
-                '[ADMIN] Recv Transport connection state changed:',
-                state,
+                `[ADMIN] Recv Transport connection state changed: ${state}`,
             );
-            if (state === 'failed' || state === 'disconnected') {
-                console.log('[ADMIN] Transport failed, restarting ICE...');
-                restartIce(transport.id);
+            if (state === 'connected') {
+                // Transport connected successfully
+            } else if (state === 'disconnected' || state === 'failed') {
+                console.warn(
+                    '[ADMIN] Transport disconnected or failed; not attempting ICE restart to avoid errors.',
+                );
+                // Optionally close transport to clean up
+                transport.close();
+                recvTransportRef.current = null;
             }
         });
-
-        console.log('Recv Transport created');
 
         // Process pending producers
         if (pendingProducersRef.current.length > 0) {

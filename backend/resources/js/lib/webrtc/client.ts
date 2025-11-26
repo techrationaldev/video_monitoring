@@ -146,9 +146,10 @@ export class ClientWebRTC {
                 );
                 if (state === 'failed' || state === 'disconnected') {
                     console.warn(
-                        '[CLIENT] Transport failed/disconnected, triggering ICE restart...',
+                        '[CLIENT] Transport failed/disconnected. Not restarting ICE to avoid loops. Reloading...',
                     );
-                    this.restartIce(this.sendTransport.id);
+                    // this.restartIce(this.sendTransport.id);
+                    window.location.reload();
                 }
             },
         );

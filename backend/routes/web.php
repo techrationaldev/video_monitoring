@@ -13,7 +13,10 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {
     Route::get('dashboard', function () {
-        $rooms = \App\Models\Room::where('active', true)->get();
+        // Only show rooms that have active sessions
+        $rooms = \App\Models\Room::whereHas('sessions', function ($q) {
+            $q->where('is_active', true);
+        })->get();
         return Inertia::render('dashboard', [
             'rooms' => $rooms
         ]);

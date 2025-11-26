@@ -12,4 +12,5 @@ export const config = {
   turnHostname: process.env.TURN_HOSTNAME || "turn.mytro.in",
   turnUsername: process.env.TURN_USERNAME || "user",
   turnPassword: process.env.TURN_PASSWORD || "pass",
+  laravelApiUrl: process.env.LARAVEL_API_URL || "http://127.0.0.1:8000/api",
 } as const;

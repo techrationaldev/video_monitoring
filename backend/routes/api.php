@@ -25,3 +25,6 @@ Route::middleware(['web'])->group(function () {
     Route::post('/rooms/{room}/join', [RoomSessionController::class, 'join']);
     Route::post('/room-sessions/{id}/leave', [RoomSessionController::class, 'leave']);
 });
+
+// Internal APIs (Should be protected by IP or secret in production)
+Route::post('/internal/stream-status', [App\Http\Controllers\Internal\StreamStatusController::class, 'update']);

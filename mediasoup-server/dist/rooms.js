@@ -37,6 +37,14 @@ export class Room {
         await transport.connect({ dtlsParameters: dtls });
         return true;
     }
+    async restartIce(transportId) {
+        const transport = this.transports.get(transportId);
+        if (!transport) {
+            throw new Error(`Transport ${transportId} not found`);
+        }
+        const iceParameters = await transport.restartIce();
+        return iceParameters;
+    }
     async produce(clientId, kind, rtp) {
         // Fallback: use the first available transport (for backward compatibility)
         const transport = [...this.transports.values()][0];

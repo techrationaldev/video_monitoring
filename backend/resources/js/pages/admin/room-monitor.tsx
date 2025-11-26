@@ -33,78 +33,106 @@ export function RoomMonitor({
     const consumersRef = useRef<Map<string, any>>(new Map());
     const pendingProducersRef = useRef<string[]>([]);
     const clientIdRef = useRef<string>(crypto.randomUUID());
+    const [connectionStatus, setConnectionStatus] = useState<
+        'connected' | 'disconnected' | 'reconnecting'
+    >('disconnected');
 
     useEffect(() => {
-        const wsUrl =
-            import.meta.env.VITE_MEDIASOUP_WS_URL || 'ws://localhost:5005';
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+        let ws: WebSocket | null = null;
+        let reconnectTimeout: NodeJS.Timeout;
 
-        ws.onopen = () => {
-            console.log('Connected to Mediasoup Server');
-            // Join as viewer
-            ws.send(
-                JSON.stringify({
-                    action: 'join-as-viewer',
-                    roomId: roomId,
-                    clientId: clientIdRef.current,
-                }),
-            );
+        const connect = () => {
+            const wsUrl =
+                import.meta.env.VITE_MEDIASOUP_WS_URL || 'ws://localhost:5005';
+            ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                console.log('Connected to Mediasoup Server');
+                setConnectionStatus('connected');
+                // Join as viewer
+                ws?.send(
+                    JSON.stringify({
+                        action: 'join-as-viewer',
+                        roomId: roomId,
+                        clientId: clientIdRef.current,
+                    }),
+                );
+            };
+
+            ws.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                const { action, data } = msg;
+
+                switch (action) {
+                    case 'router-rtp-capabilities':
+                        await loadDevice(data);
+                        // After loading device, create recv transport
+                        ws?.send(
+                            JSON.stringify({
+                                action: 'create-recv-transport',
+                                roomId,
+                                clientId: clientIdRef.current,
+                            }),
+                        );
+                        break;
+
+                    case 'create-recv-transport':
+                        await createRecvTransport(data);
+                        break;
+
+                    case 'existing-producers':
+                        // data is array of { id, kind }
+                        for (const producer of data) {
+                            consumeProducer(producer.id);
+                        }
+                        break;
+
+                    case 'new-producer':
+                        // data is { producerId, kind }
+                        consumeProducer(data.producerId);
+                        break;
+
+                    case 'producer-closed':
+                        // data is { producerId }
+                        setStreams((prev) =>
+                            prev.filter(
+                                (s) => s.producerId !== data.producerId,
+                            ),
+                        );
+                        break;
+
+                    case 'consume-done':
+                        await handleConsumeDone(data);
+                        break;
+
+                    case 'transport-connected':
+                        // Transport connected successfully
+                        break;
+
+                    case 'restart-ice-done':
+                        await handleRestartIceDone(data);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WS Closed, reconnecting in 3s...');
+                setConnectionStatus('reconnecting');
+                reconnectTimeout = setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('WS Error:', err);
+                ws?.close();
+            };
         };
 
-        ws.onmessage = async (event) => {
-            const msg = JSON.parse(event.data);
-            const { action, data } = msg;
-
-            switch (action) {
-                case 'router-rtp-capabilities':
-                    await loadDevice(data);
-                    // After loading device, create recv transport
-                    ws.send(
-                        JSON.stringify({
-                            action: 'create-recv-transport',
-                            roomId,
-                            clientId: clientIdRef.current,
-                        }),
-                    );
-                    break;
-
-                case 'create-recv-transport':
-                    await createRecvTransport(data);
-                    break;
-
-                case 'existing-producers':
-                    // data is array of { id, kind }
-                    for (const producer of data) {
-                        consumeProducer(producer.id);
-                    }
-                    break;
-
-                case 'new-producer':
-                    // data is { producerId, kind }
-                    consumeProducer(data.producerId);
-                    break;
-
-                case 'producer-closed':
-                    // data is { producerId }
-                    setStreams((prev) =>
-                        prev.filter((s) => s.producerId !== data.producerId),
-                    );
-                    // Also remove from consumers map if needed, but state update is most important
-                    break;
-
-                case 'consume-done':
-                    await handleConsumeDone(data);
-                    break;
-
-                case 'transport-connected':
-                    // Transport connected successfully
-                    break;
-            }
-        };
+        connect();
 
         return () => {
-            ws.close();
+            if (ws) ws.close();
+            clearTimeout(reconnectTimeout);
         };
     }, [roomId]);
 
@@ -146,6 +174,10 @@ export function RoomMonitor({
                 '[ADMIN] Recv Transport connection state changed:',
                 state,
             );
+            if (state === 'failed' || state === 'disconnected') {
+                console.log('[ADMIN] Transport failed, restarting ICE...');
+                restartIce(transport.id);
+            }
         });
 
         console.log('Recv Transport created');
@@ -215,6 +247,27 @@ export function RoomMonitor({
         ]);
 
         console.log(`Consuming ${kind} from producer ${producerId}`);
+        console.log(`Consuming ${kind} from producer ${producerId}`);
+    };
+
+    const restartIce = (transportId: string) => {
+        wsRef.current?.send(
+            JSON.stringify({
+                action: 'restart-ice',
+                roomId,
+                clientId: clientIdRef.current,
+                data: { transportId },
+            }),
+        );
+    };
+
+    const handleRestartIceDone = async (data: any) => {
+        const { transportId, iceParameters } = data;
+        const transport = recvTransportRef.current;
+        if (transport && transport.id === transportId) {
+            console.log('[ADMIN] Restarting ICE with new parameters');
+            await transport.restartIce({ iceParameters });
+        }
     };
 
     console.log('RoomMonitor variant:', variant);
@@ -262,8 +315,20 @@ export function RoomMonitor({
                         {roomId}
                     </span>
                 </h2>
-                <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800 dark:bg-green-900 dark:text-green-200">
-                    Active
+                <span
+                    className={`rounded-full px-3 py-1 text-sm font-medium ${
+                        connectionStatus === 'connected'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : connectionStatus === 'reconnecting'
+                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    }`}
+                >
+                    {connectionStatus === 'connected'
+                        ? 'Active'
+                        : connectionStatus === 'reconnecting'
+                          ? 'Reconnecting...'
+                          : 'Disconnected'}
                 </span>
             </div>
 

@@ -47,6 +47,15 @@ export class Room {
     return true;
   }
 
+  async restartIce(transportId: string) {
+    const transport = this.transports.get(transportId);
+    if (!transport) {
+      throw new Error(`Transport ${transportId} not found`);
+    }
+    const iceParameters = await transport.restartIce();
+    return iceParameters;
+  }
+
   async produce(
     clientId: string,
     kind: types.MediaKind,

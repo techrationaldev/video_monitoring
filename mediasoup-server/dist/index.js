@@ -1,5 +1,6 @@
 import * as mediasoup from "mediasoup";
 import { WebSocketServer, WebSocket } from "ws";
+import axios from "axios";
 import { rooms } from "./rooms.js";
 import { config } from "./config.js";
 let worker;
@@ -204,6 +205,25 @@ wss.on("connection", (ws, req) => {
                 await room.connectTransport(data.transportId, data.dtlsParameters);
                 ws.send(JSON.stringify({ action: "transport-connected" }));
             }
+            if (action === "restart-ice") {
+                if (!data.transportId) {
+                    console.error("Missing transportId for restart-ice");
+                    return;
+                }
+                try {
+                    const iceParameters = await room.restartIce(data.transportId);
+                    ws.send(JSON.stringify({
+                        action: "restart-ice-done",
+                        data: {
+                            transportId: data.transportId,
+                            iceParameters,
+                        },
+                    }));
+                }
+                catch (error) {
+                    console.error("Restart ICE error:", error);
+                }
+            }
             if (action === "produce") {
                 if (!data.kind || !data.rtpParameters || !data.transportId) {
                     console.error("Missing kind, rtpParameters, or transportId");
@@ -240,6 +260,16 @@ wss.on("connection", (ws, req) => {
     ws.on("close", () => {
         if (currentRoomId && currentClientId) {
             console.log(`[SERVER] Client disconnected: ${currentClientId} from room ${currentRoomId}`);
+            // Notify Laravel backend that stream ended
+            axios
+                .post(`${config.laravelApiUrl}/internal/stream-status`, {
+                roomId: currentRoomId,
+                clientId: currentClientId,
+                status: "ended",
+            })
+                .catch((err) => {
+                console.error("[SERVER] Failed to notify backend of stream end:", err.message);
+            });
             const room = rooms.get(currentRoomId);
             if (room) {
                 const removedProducerIds = room.removeClient(currentClientId);

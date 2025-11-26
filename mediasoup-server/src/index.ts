@@ -400,18 +400,28 @@ wss.on("connection", (ws: WebSocket, req) => {
           const { transportId } = data;
           const room = rooms.get(currentRoomId!);
           if (!room) {
-            throw new Error(`Room ${currentRoomId} not found`);
+            // Room gone (server restart?), tell client to reset
+            ws.send(JSON.stringify({ action: "session-ended" }));
+            return;
           }
-          const iceParameters = await room.restartIce(transportId);
-          ws.send(
-            JSON.stringify({
-              action: "restart-ice-done",
-              data: {
-                transportId,
-                iceParameters,
-              },
-            })
-          );
+          try {
+            const iceParameters = await room.restartIce(transportId);
+            ws.send(
+              JSON.stringify({
+                action: "restart-ice-done",
+                data: {
+                  transportId,
+                  iceParameters,
+                },
+              })
+            );
+          } catch (error: any) {
+            console.error(`[SERVER] Restart ICE failed: ${error.message}`);
+            if (error.message.includes("not found")) {
+              // Transport gone, tell client to reset
+              ws.send(JSON.stringify({ action: "session-ended" }));
+            }
+          }
           break;
         }
       }

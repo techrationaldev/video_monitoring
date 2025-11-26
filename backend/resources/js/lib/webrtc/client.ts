@@ -36,6 +36,13 @@ export class ClientWebRTC {
                 this.handleRestartIceDone(data.data);
             }
 
+            if (data.action === 'session-ended') {
+                console.warn(
+                    '[CLIENT] Session ended by server (restart?), reloading...',
+                );
+                window.location.reload();
+            }
+
             callback(data);
         };
     }

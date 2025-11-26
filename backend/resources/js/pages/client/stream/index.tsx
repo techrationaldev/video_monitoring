@@ -13,7 +13,22 @@ export default function ClientStreamPage() {
             roomId = `client-${Date.now()}`;
             localStorage.setItem('stream_room_id', roomId);
         }
-        const connectionId = crypto.randomUUID();
+        if (!roomId) {
+            roomId = `client-${Date.now()}`;
+            localStorage.setItem('stream_room_id', roomId);
+        }
+
+        // Persist connection ID to prevent "ended" race condition on refresh
+        let connectionId = sessionStorage.getItem(
+            `stream_connection_id_${roomId}`,
+        );
+        if (!connectionId) {
+            connectionId = crypto.randomUUID();
+            sessionStorage.setItem(
+                `stream_connection_id_${roomId}`,
+                connectionId,
+            );
+        }
 
         // 1. Call Laravel API to create session
         axios

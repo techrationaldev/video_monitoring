@@ -45,6 +45,32 @@ async function setupMediasoup() {
 await setupMediasoup();
 const wss = new WebSocketServer({ port: config.serverPort });
 console.log(`[SERVER] WS running on port ${config.serverPort}`);
+const pendingRemovals = new Map();
+const adminClients = new Set();
+function broadcastActiveRooms() {
+    const activeRooms = [];
+    for (const room of rooms.rooms.values()) {
+        // Consider a room active if it has at least one producer (streamer)
+        if (room.producers.size > 0) {
+            activeRooms.push({
+                id: room.id, // room.id is the room name
+                name: room.id,
+                viewerCount: room.getViewerCount(),
+            });
+        }
+    }
+    const payload = JSON.stringify({
+        action: "active-rooms",
+        data: activeRooms,
+    });
+    for (const adminWs of adminClients) {
+        if (adminWs.readyState === WebSocket.OPEN) {
+            adminWs.send(payload);
+        }
+    }
+}
+// Broadcast active rooms every 3 seconds
+setInterval(broadcastActiveRooms, 3000);
 // Keep-alive interval to prevent load balancer timeouts
 setInterval(() => {
     wss.clients.forEach((ws) => {
@@ -70,7 +96,18 @@ wss.on("connection", (ws, req) => {
             if (clientId)
                 currentClientId = clientId;
             // const router = await getRouter(); // Use the helper function to get the router
+            // const router = await getRouter(); // Use the helper function to get the router
             const room = rooms.getOrCreate(roomId, router);
+            if (action === "join-as-admin") {
+                console.log("[SERVER] Admin joined dashboard");
+                adminClients.add(ws);
+                // Send immediate update
+                broadcastActiveRooms();
+                ws.on("close", () => {
+                    adminClients.delete(ws);
+                });
+                return;
+            }
             if (action === "join-as-streamer") {
                 // Changed from "join-room"
                 if (!clientId) {
@@ -78,6 +115,12 @@ wss.on("connection", (ws, req) => {
                     return;
                 }
                 console.log(`[SERVER] Client joined as streamer: ${clientId}`);
+                // Cancel pending removal if exists
+                if (pendingRemovals.has(clientId)) {
+                    console.log(`[SERVER] Client ${clientId} reconnected (streamer)`);
+                    clearTimeout(pendingRemovals.get(clientId));
+                    pendingRemovals.delete(clientId);
+                }
                 room.addClient(clientId, ws);
                 ws.send(JSON.stringify({
                     action: "router-rtp-capabilities",
@@ -110,7 +153,15 @@ wss.on("connection", (ws, req) => {
                     return;
                 }
                 room.addClient(clientId, ws);
-                room.addViewer(clientId); // Track viewer
+                // Cancel pending removal if exists
+                if (pendingRemovals.has(clientId)) {
+                    console.log(`[SERVER] Client ${clientId} reconnected (viewer)`);
+                    clearTimeout(pendingRemovals.get(clientId));
+                    pendingRemovals.delete(clientId);
+                }
+                else {
+                    room.addViewer(clientId); // Track viewer only if new
+                }
                 console.log(`[SERVER] Viewer joined room ${roomId}`);
                 // Broadcast viewer count to all clients in the room (including producer)
                 const viewerCount = room.getViewerCount();
@@ -272,47 +323,52 @@ wss.on("connection", (ws, req) => {
     // Cleanup on disconnect
     ws.on("close", () => {
         if (currentRoomId && currentClientId) {
-            console.log(`[SERVER] Client disconnected: ${currentClientId} from room ${currentRoomId}`);
-            // Notify Laravel backend that stream ended
-            axios
-                .post(`${config.laravelApiUrl}/internal/stream-status`, {
-                roomId: currentRoomId,
-                clientId: currentClientId,
-                status: "ended",
-            })
-                .catch((err) => {
-                console.error(`[SERVER] Failed to notify backend of stream end: ${err.message}. Check LARAVEL_API_URL in .env`);
-            });
-            const room = rooms.get(currentRoomId);
-            if (room) {
-                const removedProducerIds = room.removeClient(currentClientId);
-                // Also remove as viewer if applicable
-                room.removeViewer(currentClientId);
-                // Broadcast new viewer count
-                const viewerCount = room.getViewerCount();
-                for (const clientWs of room.clients.values()) {
-                    if (clientWs.readyState === WebSocket.OPEN) {
-                        clientWs.send(JSON.stringify({
-                            action: "viewer-count",
-                            count: viewerCount,
-                        }));
+            console.log(`[SERVER] Client disconnected: ${currentClientId} from room ${currentRoomId}. Waiting for reconnect...`);
+            const timeout = setTimeout(() => {
+                console.log(`[SERVER] Removing client ${currentClientId} after timeout`);
+                pendingRemovals.delete(currentClientId);
+                // Notify Laravel backend that stream ended
+                axios
+                    .post(`${config.laravelApiUrl}/internal/stream-status`, {
+                    roomId: currentRoomId,
+                    clientId: currentClientId,
+                    status: "ended",
+                })
+                    .catch((err) => {
+                    console.error(`[SERVER] Failed to notify backend of stream end: ${err.message}. Check LARAVEL_API_URL in .env`);
+                });
+                const room = rooms.get(currentRoomId);
+                if (room) {
+                    const removedProducerIds = room.removeClient(currentClientId);
+                    // Also remove as viewer if applicable
+                    room.removeViewer(currentClientId);
+                    // Broadcast new viewer count
+                    const viewerCount = room.getViewerCount();
+                    for (const clientWs of room.clients.values()) {
+                        if (clientWs.readyState === WebSocket.OPEN) {
+                            clientWs.send(JSON.stringify({
+                                action: "viewer-count",
+                                count: viewerCount,
+                            }));
+                        }
                     }
-                }
-                // Broadcast producer-closed to all other clients
-                if (removedProducerIds.length > 0) {
-                    for (const producerId of removedProducerIds) {
-                        for (const [otherClientId, otherWs] of room.clients) {
-                            if (otherClientId !== currentClientId &&
-                                otherWs.readyState === WebSocket.OPEN) {
-                                otherWs.send(JSON.stringify({
-                                    action: "producer-closed",
-                                    data: { producerId },
-                                }));
+                    // Broadcast producer-closed to all other clients
+                    if (removedProducerIds.length > 0) {
+                        for (const producerId of removedProducerIds) {
+                            for (const [otherClientId, otherWs] of room.clients) {
+                                if (otherClientId !== currentClientId &&
+                                    otherWs.readyState === WebSocket.OPEN) {
+                                    otherWs.send(JSON.stringify({
+                                        action: "producer-closed",
+                                        data: { producerId },
+                                    }));
+                                }
                             }
                         }
                     }
                 }
-            }
+            }, 5000); // 5 second grace period
+            pendingRemovals.set(currentClientId, timeout);
         }
     });
 });

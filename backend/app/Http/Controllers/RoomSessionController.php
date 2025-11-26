@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\RoomSession;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class RoomSessionController extends Controller
 {
@@ -14,7 +15,7 @@ class RoomSessionController extends Controller
         // Ensure room exists (using name as ID)
         $room = \App\Models\Room::firstOrCreate(
             ['name' => $roomId],
-            ['created_by' => auth()->id() ?? 1, 'active' => true]
+            ['created_by' => Auth::id() ?? 1, 'active' => true]
         );
 
         // Update room status to live
@@ -26,7 +27,7 @@ class RoomSessionController extends Controller
 
         $session = RoomSession::create([
             'room_id' => $room->id,
-            'user_id' => auth()->id(), // Nullable if guest
+            'user_id' => Auth::id(), // Nullable if guest
             'connection_id' => $request->connection_id,
             'joined_at' => now(),
             'is_active' => true,

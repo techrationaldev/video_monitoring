@@ -5,6 +5,7 @@ export class ClientWebRTC {
     private ws: WebSocket;
     private device: Device | null = null;
     private sendTransport: any;
+    private producers = new Map<string, any>();
     private roomId: string;
     private clientId: string;
     private deviceLoadedPromise: Promise<void>;

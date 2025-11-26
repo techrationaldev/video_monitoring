@@ -32,7 +32,19 @@ export function RoomMonitor({
     const recvTransportRef = useRef<any>(null);
     const consumersRef = useRef<Map<string, any>>(new Map());
     const pendingProducersRef = useRef<string[]>([]);
-    const clientIdRef = useRef<string>(crypto.randomUUID());
+    const clientIdRef = useRef<string>('');
+
+    if (!clientIdRef.current) {
+        const stored = sessionStorage.getItem(`mediasoup-client-id-${roomId}`);
+        if (stored) {
+            clientIdRef.current = stored;
+        } else {
+            const newId = crypto.randomUUID();
+            sessionStorage.setItem(`mediasoup-client-id-${roomId}`, newId);
+            clientIdRef.current = newId;
+        }
+    }
+
     const [connectionStatus, setConnectionStatus] = useState<
         'connected' | 'disconnected' | 'reconnecting'
     >('disconnected');

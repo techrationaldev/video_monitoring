@@ -458,6 +458,7 @@ wss.on("connection", (ws: WebSocket, req) => {
                 data: {
                   producerId: producer.id,
                   kind: producer.kind,
+                  clientId: clientId,
                 },
               })
             );

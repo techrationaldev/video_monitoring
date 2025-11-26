@@ -6,6 +6,8 @@ export class ClientWebRTC {
     private device: Device | null = null;
     private sendTransport: any;
     private producers = new Map<string, any>();
+    private audioProducer: any = null;
+    private videoProducer: any = null;
     private roomId: string;
     private clientId: string;
     private deviceLoadedPromise: Promise<void>;
@@ -191,25 +193,61 @@ export class ClientWebRTC {
         );
     }
 
-    async startVideoStream(videoEl: HTMLVideoElement) {
-        console.log('[CLIENT] Requesting camera...');
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
-        });
-
-        videoEl.srcObject = stream;
-
-        const track = stream.getVideoTracks()[0];
-        console.log('[CLIENT] Sending video track...');
-
+    async produceStream(stream: MediaStream) {
         if (!this.sendTransport) {
             console.error('[CLIENT] sendTransport is not ready!');
             return;
         }
 
-        await this.sendTransport.produce({ track });
+        // Produce Video
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+            console.log('[CLIENT] Producing video track...');
+            this.videoProducer = await this.sendTransport.produce({
+                track: videoTrack,
+            });
+            this.producers.set('video', this.videoProducer);
+        }
+
+        // Produce Audio
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+            console.log('[CLIENT] Producing audio track...');
+            this.audioProducer = await this.sendTransport.produce({
+                track: audioTrack,
+            });
+            this.producers.set('audio', this.audioProducer);
+        }
+    }
+
+    async replaceVideoTrack(track: MediaStreamTrack) {
+        if (this.videoProducer) {
+            await this.videoProducer.replaceTrack({ track });
+        }
+    }
+
+    muteAudio() {
+        if (this.audioProducer) {
+            this.audioProducer.pause(); // Mediasoup "pause" on producer stops sending RTP
+        }
+    }
+
+    unmuteAudio() {
+        if (this.audioProducer) {
+            this.audioProducer.resume();
+        }
+    }
+
+    pauseVideo() {
+        if (this.videoProducer) {
+            this.videoProducer.pause();
+        }
+    }
+
+    resumeVideo() {
+        if (this.videoProducer) {
+            this.videoProducer.resume();
+        }
     }
 
     restartIce(transportId: string) {

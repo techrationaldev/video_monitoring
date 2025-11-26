@@ -184,6 +184,7 @@ export class Room {
     return Array.from(this.producers.values()).map((p) => ({
       id: p.id,
       kind: p.kind,
+      clientId: p.appData.clientId,
     }));
   }
 }

@@ -349,6 +349,7 @@ wss.on("connection", (ws, req) => {
                             data: {
                                 producerId: producer.id,
                                 kind: producer.kind,
+                                clientId: clientId,
                             },
                         }));
                     }

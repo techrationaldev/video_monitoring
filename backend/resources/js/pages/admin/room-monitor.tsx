@@ -302,11 +302,19 @@ export function RoomMonitor({
                 // Transport connected successfully
             } else if (state === 'disconnected' || state === 'failed') {
                 console.warn(
-                    '[ADMIN] Transport disconnected or failed; not attempting ICE restart to avoid errors.',
+                    '[ADMIN] Transport disconnected or failed; closing WS to trigger reconnect.',
                 );
-                // Optionally close transport to clean up
+                // Clean up transport
                 transport.close();
                 recvTransportRef.current = null;
+
+                // Close WS to trigger onclose and reconnect
+                if (
+                    wsRef.current &&
+                    wsRef.current.readyState === WebSocket.OPEN
+                ) {
+                    wsRef.current.close();
+                }
             }
         });
 

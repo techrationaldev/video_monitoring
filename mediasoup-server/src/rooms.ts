@@ -21,6 +21,16 @@ export class Room {
     const transport = await createWebRtcTransport(this.router);
     this.transports.set(transport.id, transport);
 
+    transport.on("dtlsstatechange", (dtlsState) => {
+      console.log(
+        `[SERVER] Transport ${transport.id} DTLS state: ${dtlsState}`
+      );
+    });
+
+    transport.on("icestatechange", (iceState) => {
+      console.log(`[SERVER] Transport ${transport.id} ICE state: ${iceState}`);
+    });
+
     if (!this.clientTransports.has(clientId)) {
       this.clientTransports.set(clientId, new Set());
     }
@@ -148,6 +158,7 @@ export class Room {
   }
 
   removeClient(clientId: string): string[] {
+    console.log(`[SERVER] Removing client ${clientId}`);
     const removedProducerIds: string[] = [];
 
     // Find producers for this client
@@ -166,6 +177,9 @@ export class Room {
       for (const transportId of transportIds) {
         const transport = this.transports.get(transportId);
         if (transport) {
+          console.log(
+            `[SERVER] Closing transport ${transportId} for client ${clientId}`
+          );
           transport.close();
           this.transports.delete(transportId);
         }

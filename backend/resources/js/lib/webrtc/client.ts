@@ -98,6 +98,10 @@ export class ClientWebRTC {
             },
         );
 
+        this.sendTransport.on('connectionstatechange', (state: string) => {
+            console.log('[CLIENT] Transport connection state changed:', state);
+        });
+
         this.sendTransport.on(
             'produce',
             ({ kind, rtpParameters }: any, callback: any) => {

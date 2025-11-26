@@ -141,6 +141,13 @@ export function RoomMonitor({
             callback();
         });
 
+        transport.on('connectionstatechange', (state: string) => {
+            console.log(
+                '[ADMIN] Recv Transport connection state changed:',
+                state,
+            );
+        });
+
         console.log('Recv Transport created');
 
         // Process pending producers

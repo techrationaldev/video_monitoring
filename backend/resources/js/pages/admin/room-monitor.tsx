@@ -21,6 +21,57 @@ interface ClientStream {
     audio?: MediaTrack;
 }
 
+function VideoPlayer({
+    track,
+    controls = true,
+    muted = true,
+}: {
+    track: MediaStreamTrack;
+    controls?: boolean;
+    muted?: boolean;
+}) {
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    useEffect(() => {
+        if (videoRef.current && track) {
+            const stream = new MediaStream([track]);
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(console.error);
+        }
+    }, [track]);
+
+    return (
+        <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={muted}
+            controls={controls}
+            className="h-full w-full object-cover"
+        />
+    );
+}
+
+function AudioPlayer({
+    track,
+    muted,
+}: {
+    track: MediaStreamTrack;
+    muted: boolean;
+}) {
+    const audioRef = useRef<HTMLAudioElement>(null);
+
+    useEffect(() => {
+        if (audioRef.current && track) {
+            const stream = new MediaStream([track]);
+            audioRef.current.srcObject = stream;
+            audioRef.current.play().catch(console.error);
+        }
+    }, [track]);
+
+    return <audio ref={audioRef} autoPlay muted={muted} />;
+}
+
 export default function RoomMonitorPage({ roomId }: Props) {
     return (
         <AppLayout breadcrumbs={[{ title: 'Room Monitor', href: '#' }]}>
@@ -166,6 +217,13 @@ export function RoomMonitor({
             ws.onclose = () => {
                 console.log('[ADMIN] WS Closed, reconnecting in 3s...');
                 setConnectionStatus('reconnecting');
+
+                // Close transport to prevent it from trying to restart ICE
+                if (recvTransportRef.current) {
+                    recvTransportRef.current.close();
+                    recvTransportRef.current = null;
+                }
+
                 reconnectTimeout = setTimeout(connect, 3000);
             };
 
@@ -275,14 +333,6 @@ export function RoomMonitor({
                     producerId,
                     rtpCapabilities,
                     appData: { clientId },
-                    // Actually, consume-done comes from server, server needs to send clientId back.
-                    // We can't easily pass it through 'consume' to 'consume-done' unless server echoes it.
-                    // Server DOES send producerId. We can map producerId -> clientId locally if needed,
-                    // OR we updated server to send clientId in consume-done?
-                    // Let's check server index.ts... consume-done sends { id, producerId, kind, rtpParameters }.
-                    // It does NOT send clientId.
-                    // We need to update server to send clientId in consume-done OR map it here.
-                    // Let's map it here using a ref.
                 },
             }),
         );
@@ -326,7 +376,6 @@ export function RoomMonitor({
         // If we successfully consumed, the stream is back
         setIsInterrupted(false);
 
-        console.log(`Consuming ${kind} from producer ${producerId}`);
         console.log(`Consuming ${kind} from producer ${producerId}`);
     };
 
@@ -572,55 +621,4 @@ export function RoomMonitor({
             </div>
         </div>
     );
-}
-
-function VideoPlayer({
-    track,
-    controls = true,
-    muted = true,
-}: {
-    track: MediaStreamTrack;
-    controls?: boolean;
-    muted?: boolean;
-}) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-
-    useEffect(() => {
-        if (videoRef.current && track) {
-            const stream = new MediaStream([track]);
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(console.error);
-        }
-    }, [track]);
-
-    return (
-        <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={muted}
-            controls={controls}
-            className="h-full w-full object-cover"
-        />
-    );
-}
-
-function AudioPlayer({
-    track,
-    muted,
-}: {
-    track: MediaStreamTrack;
-    muted: boolean;
-}) {
-    const audioRef = useRef<HTMLAudioElement>(null);
-
-    useEffect(() => {
-        if (audioRef.current && track) {
-            const stream = new MediaStream([track]);
-            audioRef.current.srcObject = stream;
-            audioRef.current.play().catch(console.error);
-        }
-    }, [track]);
-
-    return <audio ref={audioRef} autoPlay muted={muted} />;
 }

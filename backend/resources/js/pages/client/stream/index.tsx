@@ -75,6 +75,12 @@ export default function ClientStreamPage() {
                         if (msg.action === 'viewer-count') {
                             setViewerCount(msg.count);
                         }
+                        if (msg.action === 'session-ended') {
+                            console.warn(
+                                '[PAGE] Session ended by server, reloading...',
+                            );
+                            window.location.reload();
+                        }
                     });
                 });
             })

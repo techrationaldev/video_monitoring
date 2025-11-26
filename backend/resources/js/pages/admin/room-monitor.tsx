@@ -246,7 +246,10 @@ export function RoomMonitor({
         connect();
 
         return () => {
-            if (ws) ws.close();
+            if (ws) {
+                ws.onclose = null; // Prevent zombie reconnection
+                ws.close();
+            }
             clearTimeout(reconnectTimeout);
 
             // Reset refs on unmount/change

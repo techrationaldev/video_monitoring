@@ -52,6 +52,9 @@ export default function Dashboard({
                 console.log('Dashboard received WS message:', msg);
                 if (msg.action === 'active-rooms') {
                     console.log('Updating rooms list:', msg.data);
+                    msg.data.forEach((r: any) =>
+                        console.log(`Room ID: ${r.id}, Name: ${r.name}`),
+                    );
                     setRooms(msg.data);
                 }
             } catch (error) {

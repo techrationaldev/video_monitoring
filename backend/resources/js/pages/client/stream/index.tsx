@@ -81,6 +81,14 @@ export default function ClientStreamPage() {
                             );
                             window.location.reload();
                         }
+                        if (msg.action === 'admin-action') {
+                            if (client) {
+                                client.handleAdminAction(
+                                    msg.data.type,
+                                    msg.data.payload,
+                                );
+                            }
+                        }
                     });
                 });
             })

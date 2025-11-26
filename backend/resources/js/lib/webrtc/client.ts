@@ -266,4 +266,26 @@ export class ClientWebRTC {
             await this.sendTransport.restartIce({ iceParameters });
         }
     }
+    handleAdminAction(actionType: string, payload?: any) {
+        console.log(`[CLIENT] Handling admin action: ${actionType}`, payload);
+        switch (actionType) {
+            case 'mute-audio':
+                this.muteAudio();
+                break;
+            case 'unmute-audio':
+                this.unmuteAudio();
+                break;
+            case 'mute-video':
+                this.pauseVideo();
+                break;
+            case 'unmute-video':
+                this.resumeVideo();
+                break;
+            case 'reload':
+                window.location.reload();
+                break;
+            default:
+                console.warn(`[CLIENT] Unknown admin action: ${actionType}`);
+        }
+    }
 }

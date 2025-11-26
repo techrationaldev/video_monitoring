@@ -1,5 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
+import { Mic, MicOff, RefreshCw, Video, VideoOff } from 'lucide-react';
 import { Device } from 'mediasoup-client';
 import { useEffect, useRef, useState } from 'react';
 
@@ -128,6 +129,13 @@ export function RoomMonitor({
     const [connectionStatus, setConnectionStatus] = useState<
         'connected' | 'disconnected' | 'reconnecting'
     >('disconnected');
+    const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+    const [remoteAudioStates, setRemoteAudioStates] = useState<
+        Record<string, boolean>
+    >({});
+    const [remoteVideoStates, setRemoteVideoStates] = useState<
+        Record<string, boolean>
+    >({});
     const [isInterrupted, setIsInterrupted] = useState(false);
 
     useEffect(() => {
@@ -455,6 +463,123 @@ export function RoomMonitor({
                                         No Video
                                     </div>
                                 )}
+                                {/* Admin Controls Overlay */}
+                                <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const isMuted =
+                                                    remoteAudioStates[
+                                                        client.clientId
+                                                    ] || false;
+                                                const newMuted = !isMuted;
+                                                setRemoteAudioStates(
+                                                    (prev) => ({
+                                                        ...prev,
+                                                        [client.clientId]:
+                                                            newMuted,
+                                                    }),
+                                                );
+                                                wsRef.current?.send(
+                                                    JSON.stringify({
+                                                        action: 'admin-action',
+                                                        roomId,
+                                                        targetClientId:
+                                                            client.clientId,
+                                                        actionType: newMuted
+                                                            ? 'mute-audio'
+                                                            : 'unmute-audio',
+                                                    }),
+                                                );
+                                            }}
+                                            className={`rounded p-1.5 text-white ${remoteAudioStates[client.clientId] ? 'bg-red-500/80' : 'bg-black/50 hover:bg-black/70'}`}
+                                            title={
+                                                remoteAudioStates[
+                                                    client.clientId
+                                                ]
+                                                    ? 'Unmute Remote Mic'
+                                                    : 'Mute Remote Mic'
+                                            }
+                                        >
+                                            {remoteAudioStates[
+                                                client.clientId
+                                            ] ? (
+                                                <MicOff size={16} />
+                                            ) : (
+                                                <Mic size={16} />
+                                            )}
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                const isMuted =
+                                                    remoteVideoStates[
+                                                        client.clientId
+                                                    ] || false;
+                                                const newMuted = !isMuted;
+                                                setRemoteVideoStates(
+                                                    (prev) => ({
+                                                        ...prev,
+                                                        [client.clientId]:
+                                                            newMuted,
+                                                    }),
+                                                );
+                                                wsRef.current?.send(
+                                                    JSON.stringify({
+                                                        action: 'admin-action',
+                                                        roomId,
+                                                        targetClientId:
+                                                            client.clientId,
+                                                        actionType: newMuted
+                                                            ? 'mute-video'
+                                                            : 'unmute-video',
+                                                    }),
+                                                );
+                                            }}
+                                            className={`rounded p-1.5 text-white ${remoteVideoStates[client.clientId] ? 'bg-red-500/80' : 'bg-black/50 hover:bg-black/70'}`}
+                                            title={
+                                                remoteVideoStates[
+                                                    client.clientId
+                                                ]
+                                                    ? 'Enable Remote Camera'
+                                                    : 'Disable Remote Camera'
+                                            }
+                                        >
+                                            {remoteVideoStates[
+                                                client.clientId
+                                            ] ? (
+                                                <VideoOff size={16} />
+                                            ) : (
+                                                <Video size={16} />
+                                            )}
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                if (
+                                                    confirm(
+                                                        'Force reload remote client?',
+                                                    )
+                                                ) {
+                                                    wsRef.current?.send(
+                                                        JSON.stringify({
+                                                            action: 'admin-action',
+                                                            roomId,
+                                                            targetClientId:
+                                                                client.clientId,
+                                                            actionType:
+                                                                'reload',
+                                                        }),
+                                                    );
+                                                }
+                                            }}
+                                            className="rounded bg-black/50 p-1.5 text-white hover:bg-red-600/80"
+                                            title="Force Reload Remote Client"
+                                        >
+                                            <RefreshCw size={16} />
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
                                     {client.clientId.slice(0, 6)}
                                 </div>

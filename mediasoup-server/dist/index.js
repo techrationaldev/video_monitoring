@@ -355,6 +355,30 @@ wss.on("connection", (ws, req) => {
                     }
                 }
             }
+            if (action === "admin-action") {
+                if (!data.targetClientId || !data.actionType) {
+                    console.error("Missing targetClientId or actionType for admin-action");
+                    return;
+                }
+                const { targetClientId, actionType } = data;
+                const room = rooms.get(roomId);
+                if (room) {
+                    const targetWs = room.clients.get(targetClientId);
+                    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                        console.log(`[SERVER] Forwarding admin action ${actionType} to ${targetClientId}`);
+                        targetWs.send(JSON.stringify({
+                            action: "admin-action",
+                            data: {
+                                type: actionType,
+                                payload: data.payload,
+                            },
+                        }));
+                    }
+                    else {
+                        console.warn(`[SERVER] Target client ${targetClientId} not found or closed`);
+                    }
+                }
+            }
         }
         catch (error) {
             console.error("[SERVER] Error handling message:", error);

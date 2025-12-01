@@ -146,6 +146,13 @@ export class Room {
             clientId: p.appData.clientId,
         }));
     }
+    closeProducer(producerId) {
+        const producer = this.producers.get(producerId);
+        if (producer) {
+            producer.close();
+            this.producers.delete(producerId);
+        }
+    }
 }
 export class Rooms {
     constructor() {

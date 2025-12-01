@@ -380,6 +380,27 @@ wss.on("connection", (ws, req) => {
                     }
                 }
             }
+            if (action === "close-producer") {
+                if (!data.producerId) {
+                    console.error("Missing producerId for close-producer");
+                    return;
+                }
+                const { producerId } = data;
+                const room = rooms.get(roomId);
+                if (room) {
+                    room.closeProducer(producerId);
+                    // Notify other clients
+                    for (const [otherClientId, otherWs] of room.clients) {
+                        if (otherClientId !== clientId &&
+                            otherWs.readyState === WebSocket.OPEN) {
+                            otherWs.send(JSON.stringify({
+                                action: "producer-closed",
+                                data: { producerId },
+                            }));
+                        }
+                    }
+                }
+            }
             if (action === "admin-action") {
                 if (!data.targetClientId || !data.actionType) {
                     console.error("Missing targetClientId or actionType for admin-action");

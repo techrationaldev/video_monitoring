@@ -68,7 +68,7 @@ export class Room {
         });
         return producer;
     }
-    async produceWithTransportId(clientId, transportId, kind, rtp) {
+    async produceWithTransportId(clientId, transportId, kind, rtp, appData = {}) {
         const transport = this.transports.get(transportId);
         if (!transport) {
             throw new Error(`Transport ${transportId} not found`);

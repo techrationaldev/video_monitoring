@@ -95,7 +95,8 @@ export class Room {
     clientId: string,
     transportId: string,
     kind: types.MediaKind,
-    rtp: types.RtpParameters
+    rtp: types.RtpParameters,
+    appData: any = {}
   ) {
     const transport = this.transports.get(transportId);
     if (!transport) {

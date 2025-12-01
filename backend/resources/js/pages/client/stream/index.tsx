@@ -1,7 +1,17 @@
-import { AudioLevelIndicator } from '@/components/AudioLevelIndicator';
 import StreamSetup from '@/components/StreamSetup';
 import { ClientWebRTC } from '@/lib/webrtc/client';
 import axios from 'axios';
+import {
+    Activity,
+    Camera,
+    CameraOff,
+    Mic,
+    MicOff,
+    PhoneOff,
+    Settings,
+    Signal,
+    Volume2,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 export default function ClientStreamPage() {
@@ -16,6 +26,7 @@ export default function ClientStreamPage() {
     // Controls State
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
+    const [showSettings, setShowSettings] = useState(false);
 
     // Admin Talkback State
     const [remoteAudioTrack, setRemoteAudioTrack] =
@@ -34,6 +45,28 @@ export default function ClientStreamPage() {
         useState<string>('');
     const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] =
         useState<string>('');
+
+    // Session Timer
+    const [sessionDuration, setSessionDuration] = useState(0);
+
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (connected) {
+            interval = setInterval(() => {
+                setSessionDuration((prev) => prev + 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [connected]);
+
+    const formatDuration = (seconds: number) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h.toString().padStart(2, '0')}:${m
+            .toString()
+            .padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
 
     useEffect(() => {
         const getDevices = async () => {
@@ -148,7 +181,33 @@ export default function ClientStreamPage() {
                             await client.createSendTransport(msg.data);
                         }
                         if (msg.action === 'start-produce') {
-                            await client.produceStream(stream);
+                            // Gather Metadata
+                            const ua = navigator.userAgent;
+                            let os = 'Unknown OS';
+                            if (ua.indexOf('Win') !== -1) os = 'Windows';
+                            if (ua.indexOf('Mac') !== -1) os = 'macOS';
+                            if (ua.indexOf('Linux') !== -1) os = 'Linux';
+                            if (ua.indexOf('Android') !== -1) os = 'Android';
+                            if (ua.indexOf('like Mac') !== -1) os = 'iOS';
+
+                            let browser = 'Unknown Browser';
+                            if (ua.indexOf('Chrome') !== -1) browser = 'Chrome';
+                            if (ua.indexOf('Firefox') !== -1)
+                                browser = 'Firefox';
+                            if (
+                                ua.indexOf('Safari') !== -1 &&
+                                ua.indexOf('Chrome') === -1
+                            )
+                                browser = 'Safari';
+                            if (ua.indexOf('Edge') !== -1) browser = 'Edge';
+
+                            const metadata = {
+                                os,
+                                browser,
+                                ip: '127.0.0.1', // Placeholder, real IP needs server-side extraction
+                            };
+
+                            await client.produceStream(stream, metadata);
                             setConnected(true);
                         }
                         if (msg.action === 'viewer-count') {
@@ -277,6 +336,23 @@ export default function ClientStreamPage() {
         }
     };
 
+    const changeAudioOutput = async (deviceId: string) => {
+        try {
+            if (
+                remoteAudioRef.current &&
+                'setSinkId' in remoteAudioRef.current
+            ) {
+                // @ts-ignore
+                await remoteAudioRef.current.setSinkId(deviceId);
+                setSelectedAudioOutputDeviceId(deviceId);
+            } else {
+                console.warn('Audio output selection not supported');
+            }
+        } catch (e) {
+            console.error('Failed to set audio output device:', e);
+        }
+    };
+
     const endStream = () => {
         if (confirm('Are you sure you want to end the stream?')) {
             if (clientRef) {
@@ -295,32 +371,20 @@ export default function ClientStreamPage() {
 
     if (isEnded) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6 dark:bg-gray-900">
-                <div className="w-full max-w-md rounded-xl bg-white p-8 text-center shadow-xl dark:bg-gray-800">
-                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
-                        <svg
-                            className="h-8 w-8 text-red-600 dark:text-red-200"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                            />
-                        </svg>
+            <div className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
+                <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center shadow-2xl">
+                    <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
+                        <PhoneOff className="h-10 w-10 text-red-500" />
                     </div>
-                    <h2 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">
+                    <h2 className="mb-2 text-3xl font-bold text-white">
                         Stream Ended
                     </h2>
-                    <p className="mb-6 text-gray-500 dark:text-gray-400">
-                        The streaming session has been terminated.
+                    <p className="mb-8 text-zinc-400">
+                        The streaming session has been terminated successfully.
                     </p>
                     <button
                         onClick={() => window.location.reload()}
-                        className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-800"
+                        className="w-full rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700"
                     >
                         Start New Stream
                     </button>
@@ -333,265 +397,239 @@ export default function ClientStreamPage() {
         return <StreamSetup onReady={handleStreamReady} />;
     }
 
-    const changeAudioOutput = async (deviceId: string) => {
-        try {
-            if (
-                remoteAudioRef.current &&
-                'setSinkId' in remoteAudioRef.current
-            ) {
-                // @ts-ignore
-                await remoteAudioRef.current.setSinkId(deviceId);
-                setSelectedAudioOutputDeviceId(deviceId);
-            } else {
-                console.warn('Audio output selection not supported');
-            }
-        } catch (e) {
-            console.error('Failed to set audio output device:', e);
-        }
-    };
-
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6 dark:bg-gray-900">
-            <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800">
-                <div className="border-b border-gray-200 p-4 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                        <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                            Client Streaming
-                        </h1>
-                        <div className="flex items-center gap-2">
-                            {connected ? (
-                                <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200">
-                                    <span className="mr-1.5 h-2 w-2 rounded-full bg-red-600"></span>
+        <div className="relative h-screen w-screen overflow-hidden bg-black text-white">
+            {/* Main Video Feed */}
+            <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className={`h-full w-full object-contain ${!videoEnabled ? 'opacity-0' : ''}`}
+            />
+
+            {!videoEnabled && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90">
+                    <CameraOff className="mb-4 h-16 w-16 text-zinc-600" />
+                    <span className="text-xl font-medium text-zinc-400">
+                        Camera Paused
+                    </span>
+                </div>
+            )}
+
+            {/* Header Overlay */}
+            <div className="pointer-events-none absolute top-0 right-0 left-0 flex items-start justify-between bg-gradient-to-b from-black/80 to-transparent p-6">
+                <div className="pointer-events-auto flex items-center gap-4">
+                    <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 backdrop-blur-md">
+                        {connected ? (
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-2.5 w-2.5">
+                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
+                                </span>
+                                <span className="text-xs font-bold tracking-wider text-red-500">
                                     LIVE
                                 </span>
-                            ) : (
-                                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-yellow-500"></span>
+                                <span className="text-xs font-bold tracking-wider text-yellow-500">
                                     CONNECTING
                                 </span>
-                            )}
-                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                {viewerCount} Viewers
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                <div className="group relative aspect-video bg-black">
-                    <video
-                        ref={localVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        className={`h-full w-full object-cover ${!videoEnabled ? 'opacity-50' : ''}`}
-                    />
-                    {!videoEnabled && (
-                        <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                            Camera Paused
-                        </div>
-                    )}
-
-                    {/* Remote Audio Player */}
-                    <audio ref={remoteAudioRef} autoPlay />
-                    {remoteAudioTrack && (
-                        <div className="absolute top-4 right-4 flex animate-pulse items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-white shadow-lg">
-                            <svg
-                                className="h-4 w-4"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                />
-                            </svg>
-                            <span className="text-xs font-bold">
-                                Admin Speaking
-                            </span>
-                        </div>
-                    )}
-
-                    {/* Live Controls Overlay */}
-                    <div className="absolute right-0 bottom-0 left-0 flex justify-center gap-4 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                            onClick={toggleAudio}
-                            className={`rounded-full p-3 ${audioEnabled ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white hover:bg-red-600'} backdrop-blur-sm transition-colors`}
-                            title={audioEnabled ? 'Mute Mic' : 'Unmute Mic'}
-                        >
-                            {audioEnabled ? (
-                                <svg
-                                    className="h-6 w-6"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                                    />
-                                </svg>
-                            ) : (
-                                <svg
-                                    className="h-6 w-6"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                    />
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                                    />
-                                </svg>
-                            )}
-                        </button>
-                        {mediaStream?.getAudioTracks()[0] && (
-                            <div className="flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 backdrop-blur-sm">
-                                <span className="text-xs text-white">
-                                    Mic Level:
-                                </span>
-                                <AudioLevelIndicator
-                                    track={mediaStream.getAudioTracks()[0]}
-                                />
                             </div>
                         )}
-                        <button
-                            onClick={toggleVideo}
-                            className={`rounded-full p-3 ${videoEnabled ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white hover:bg-red-600'} backdrop-blur-sm transition-colors`}
-                            title={
-                                videoEnabled
-                                    ? 'Turn Off Camera'
-                                    : 'Turn On Camera'
-                            }
-                        >
-                            {videoEnabled ? (
-                                <svg
-                                    className="h-6 w-6"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                    />
-                                </svg>
-                            ) : (
-                                <svg
-                                    className="h-6 w-6"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                                    />
-                                </svg>
-                            )}
-                        </button>
+                    </div>
+                    <div className="rounded-full border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 font-mono text-sm text-zinc-300 backdrop-blur-md">
+                        {formatDuration(sessionDuration)}
                     </div>
                 </div>
-                <div className="p-4">
-                    <div className="mb-4 flex flex-wrap gap-4">
-                        <div className="min-w-[200px] flex-1">
-                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Camera
-                            </label>
-                            <select
-                                value={selectedVideoDeviceId}
-                                onChange={(e) => switchCamera(e.target.value)}
-                                className="w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                            >
-                                {videoDevices.map((device) => (
-                                    <option
-                                        key={device.deviceId}
-                                        value={device.deviceId}
+
+                <div className="pointer-events-auto flex items-center gap-3">
+                    <div className="flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 backdrop-blur-md">
+                        <Signal className="h-3.5 w-3.5 text-green-500" />
+                        <span className="text-xs font-medium text-green-500">
+                            Excellent
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Client ID Label */}
+            <div className="pointer-events-none absolute bottom-28 left-6">
+                <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/80 px-4 py-2 backdrop-blur-md">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold">
+                        YOU
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-white">
+                            Client Stream
+                        </span>
+                        <span className="font-mono text-xs text-zinc-400">
+                            {localStorage.getItem('stream_room_id')}
+                        </span>
+                    </div>
+                    <div className="mx-1 h-4 w-[1px] bg-zinc-700"></div>
+                    <Activity className="h-4 w-4 text-green-500" />
+                </div>
+            </div>
+
+            {/* Remote Audio Player & Indicator */}
+            <audio ref={remoteAudioRef} autoPlay />
+            {remoteAudioTrack && (
+                <div className="pointer-events-auto absolute top-24 right-6 animate-in duration-300 fade-in slide-in-from-right">
+                    <div className="flex animate-pulse items-center gap-3 rounded-lg bg-red-500 px-4 py-2 text-white shadow-lg">
+                        <Volume2 className="h-5 w-5" />
+                        <span className="text-sm font-bold">
+                            Admin Speaking...
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom Controls Bar */}
+            <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-2 shadow-2xl backdrop-blur-xl">
+                <button
+                    onClick={toggleAudio}
+                    className={`rounded-xl p-3.5 transition-all duration-200 ${
+                        audioEnabled
+                            ? 'bg-zinc-800 text-white hover:bg-zinc-700'
+                            : 'border border-red-500/50 bg-red-500/10 text-red-500 hover:bg-red-500/20'
+                    }`}
+                    title={audioEnabled ? 'Mute Mic' : 'Unmute Mic'}
+                >
+                    {audioEnabled ? (
+                        <Mic className="h-5 w-5" />
+                    ) : (
+                        <MicOff className="h-5 w-5" />
+                    )}
+                </button>
+
+                <button
+                    onClick={toggleVideo}
+                    className={`rounded-xl p-3.5 transition-all duration-200 ${
+                        videoEnabled
+                            ? 'bg-zinc-800 text-white hover:bg-zinc-700'
+                            : 'border border-red-500/50 bg-red-500/10 text-red-500 hover:bg-red-500/20'
+                    }`}
+                    title={videoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
+                >
+                    {videoEnabled ? (
+                        <Camera className="h-5 w-5" />
+                    ) : (
+                        <CameraOff className="h-5 w-5" />
+                    )}
+                </button>
+
+                <div className="mx-1 h-8 w-[1px] bg-zinc-800"></div>
+
+                <div className="relative">
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        className={`rounded-xl p-3.5 transition-all duration-200 ${
+                            showSettings
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                        }`}
+                        title="Settings"
+                    >
+                        <Settings className="h-5 w-5" />
+                    </button>
+
+                    {/* Settings Popover */}
+                    {showSettings && (
+                        <div className="absolute bottom-full left-1/2 mb-4 w-72 -translate-x-1/2 animate-in rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl duration-200 zoom-in-95">
+                            <h3 className="mb-3 text-xs font-bold tracking-wider text-zinc-500 uppercase">
+                                Device Settings
+                            </h3>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="mb-1.5 block text-xs text-zinc-400">
+                                        Camera
+                                    </label>
+                                    <select
+                                        value={selectedVideoDeviceId}
+                                        onChange={(e) =>
+                                            switchCamera(e.target.value)
+                                        }
+                                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-sm text-white outline-none focus:border-transparent focus:ring-2 focus:ring-blue-600"
                                     >
-                                        {device.label ||
-                                            `Camera ${device.deviceId.slice(0, 5)}...`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="min-w-[200px] flex-1">
-                            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Microphone
-                            </label>
-                            <select
-                                value={selectedAudioDeviceId}
-                                onChange={(e) =>
-                                    switchMicrophone(e.target.value)
-                                }
-                                className="w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                            >
-                                {audioDevices.map((device) => (
-                                    <option
-                                        key={device.deviceId}
-                                        value={device.deviceId}
+                                        {videoDevices.map((device) => (
+                                            <option
+                                                key={device.deviceId}
+                                                value={device.deviceId}
+                                            >
+                                                {device.label ||
+                                                    `Camera ${device.deviceId.slice(0, 5)}...`}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs text-zinc-400">
+                                        Microphone
+                                    </label>
+                                    <select
+                                        value={selectedAudioDeviceId}
+                                        onChange={(e) =>
+                                            switchMicrophone(e.target.value)
+                                        }
+                                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-sm text-white outline-none focus:border-transparent focus:ring-2 focus:ring-blue-600"
                                     >
-                                        {device.label ||
-                                            `Mic ${device.deviceId.slice(0, 5)}...`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        {/* Speaker Selection */}
-                        {audioOutputDevices.length > 0 && (
-                            <div className="min-w-[200px] flex-1">
-                                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Speaker
-                                </label>
-                                <select
-                                    className="w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                    value={selectedAudioOutputDeviceId}
-                                    onChange={(e) =>
-                                        changeAudioOutput(e.target.value)
-                                    }
-                                >
-                                    {audioOutputDevices.map((device) => (
-                                        <option
-                                            key={device.deviceId}
-                                            value={device.deviceId}
+                                        {audioDevices.map((device) => (
+                                            <option
+                                                key={device.deviceId}
+                                                value={device.deviceId}
+                                            >
+                                                {device.label ||
+                                                    `Mic ${device.deviceId.slice(0, 5)}...`}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {audioOutputDevices.length > 0 && (
+                                    <div>
+                                        <label className="mb-1.5 block text-xs text-zinc-400">
+                                            Speaker
+                                        </label>
+                                        <select
+                                            value={selectedAudioOutputDeviceId}
+                                            onChange={(e) =>
+                                                changeAudioOutput(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-sm text-white outline-none focus:border-transparent focus:ring-2 focus:ring-blue-600"
                                         >
-                                            {device.label ||
-                                                `Speaker ${device.deviceId.slice(0, 5)}...`}
-                                        </option>
-                                    ))}
-                                </select>
+                                            {audioOutputDevices.map(
+                                                (device) => (
+                                                    <option
+                                                        key={device.deviceId}
+                                                        value={device.deviceId}
+                                                    >
+                                                        {device.label ||
+                                                            `Speaker ${device.deviceId.slice(0, 5)}...`}
+                                                    </option>
+                                                ),
+                                            )}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Share your stream ID:{' '}
-                            <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-                                {localStorage.getItem('stream_room_id')}
-                            </code>
-                        </p>
-                        <button
-                            onClick={endStream}
-                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none dark:focus:ring-offset-gray-800"
-                        >
-                            End Stream
-                        </button>
-                    </div>
+                        </div>
+                    )}
                 </div>
+
+                <button
+                    onClick={endStream}
+                    className="flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3.5 text-sm font-bold text-white transition-all duration-200 hover:bg-red-700"
+                >
+                    <PhoneOff className="h-4 w-4" />
+                    <span>End Stream</span>
+                </button>
             </div>
         </div>
     );

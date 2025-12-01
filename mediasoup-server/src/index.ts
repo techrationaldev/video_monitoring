@@ -82,6 +82,7 @@ interface WebSocketMessage {
   kind?: types.MediaKind;
   rtpParameters?: types.RtpParameters;
   rtpCapabilities?: types.RtpCapabilities;
+  appData?: any;
   data?: any;
 }
 
@@ -471,7 +472,8 @@ wss.on("connection", (ws: WebSocket, req) => {
           clientId,
           data.transportId,
           data.kind,
-          data.rtpParameters
+          data.rtpParameters,
+          data.appData
         );
 
         ws.send(
@@ -491,6 +493,7 @@ wss.on("connection", (ws: WebSocket, req) => {
                   producerId: producer.id,
                   kind: producer.kind,
                   clientId: clientId,
+                  appData: producer.appData,
                 },
               })
             );

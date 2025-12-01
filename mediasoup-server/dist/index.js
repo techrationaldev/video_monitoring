@@ -361,7 +361,7 @@ wss.on("connection", (ws, req) => {
                     console.error("Missing clientId for produce");
                     return;
                 }
-                const producer = await room.produceWithTransportId(clientId, data.transportId, data.kind, data.rtpParameters);
+                const producer = await room.produceWithTransportId(clientId, data.transportId, data.kind, data.rtpParameters, data.appData);
                 ws.send(JSON.stringify({
                     action: "produce-done",
                     producerId: producer.id,
@@ -375,6 +375,7 @@ wss.on("connection", (ws, req) => {
                                 producerId: producer.id,
                                 kind: producer.kind,
                                 clientId: clientId,
+                                appData: producer.appData,
                             },
                         }));
                     }

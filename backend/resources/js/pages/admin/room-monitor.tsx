@@ -1,7 +1,18 @@
-import { AudioLevelIndicator } from '@/components/AudioLevelIndicator';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
-import { Mic, MicOff, RefreshCw, Video, VideoOff } from 'lucide-react';
+import {
+    Activity,
+    BarChart3,
+    Clock,
+    Maximize2,
+    Mic,
+    MicOff,
+    Play,
+    Settings,
+    Square,
+    Trash2,
+    Wifi,
+} from 'lucide-react';
 import { Device } from 'mediasoup-client';
 import { useEffect, useRef, useState } from 'react';
 
@@ -10,27 +21,59 @@ interface Props {
 }
 
 interface MediaTrack {
-    id: string; // Consumer ID
+    id: string;
     producerId: string;
     kind: 'video' | 'audio';
     track: MediaStreamTrack;
     clientId: string;
+    appData?: any;
 }
 
 interface ClientStream {
     clientId: string;
     video?: MediaTrack;
+
     audio?: MediaTrack;
+    metadata?: {
+        os?: string;
+        browser?: string;
+        ip?: string;
+        source?: string;
+    };
 }
+
+// Mock Data for Design Matching
+const MOCK_CLIPS = [
+    {
+        id: 'clip_1',
+        name: 'session_rec_1001.webm',
+        date: 'Today, 10:41 AM',
+        size: '12MB',
+    },
+    {
+        id: 'clip_2',
+        name: 'session_rec_1002.webm',
+        date: 'Today, 10:42 AM',
+        size: '14MB',
+    },
+    {
+        id: 'clip_3',
+        name: 'session_rec_1003.webm',
+        date: 'Today, 10:43 AM',
+        size: '12MB',
+    },
+];
 
 function VideoPlayer({
     track,
     controls = true,
     muted = true,
+    className = '',
 }: {
     track: MediaStreamTrack;
     controls?: boolean;
     muted?: boolean;
+    className?: string;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -49,7 +92,7 @@ function VideoPlayer({
             playsInline
             muted={muted}
             controls={controls}
-            className="h-full w-full object-cover"
+            className={`h-full w-full object-cover ${className}`}
         />
     );
 }
@@ -66,77 +109,22 @@ function AudioPlayer({
     const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
-        console.log('[AudioPlayer] Muted state changed:', muted);
         if (!muted && audioRef.current?.paused) {
-            console.log(
-                '[AudioPlayer] Unmuted and paused, attempting to play...',
-            );
             audioRef.current
                 .play()
-                .catch((e) =>
-                    console.error('[AudioPlayer] Play on unmute failed:', e),
-                );
+                .catch((e) => console.error('Play failed:', e));
         }
     }, [muted]);
 
     useEffect(() => {
         if (audioRef.current && track) {
-            console.log(
-                '[AudioPlayer] Playing track:',
-                track.id,
-                track.enabled,
-                track.readyState,
-            );
             const stream = new MediaStream([track]);
             audioRef.current.srcObject = stream;
-
             if (sinkId && 'setSinkId' in audioRef.current) {
                 // @ts-ignore
-                audioRef.current.setSinkId(sinkId).catch((err) => {
-                    console.error('Failed to set audio sink ID:', err);
-                });
+                audioRef.current.setSinkId(sinkId).catch(console.error);
             }
-
-            const playAudio = () => {
-                audioRef.current
-                    ?.play()
-                    .then(() =>
-                        console.log(
-                            '[AudioPlayer] Playback started successfully',
-                        ),
-                    )
-                    .catch((e) => {
-                        console.error(
-                            '[AudioPlayer] Play failed (likely autoplay policy):',
-                            e,
-                        );
-                        // Add one-time listener for interaction
-                        const retryPlay = () => {
-                            console.log(
-                                '[AudioPlayer] Retrying playback after interaction...',
-                            );
-                            audioRef.current
-                                ?.play()
-                                .then(() =>
-                                    console.log(
-                                        '[AudioPlayer] Retry playback successful',
-                                    ),
-                                )
-                                .catch((e) =>
-                                    console.error(
-                                        '[AudioPlayer] Retry playback failed:',
-                                        e,
-                                    ),
-                                );
-                            window.removeEventListener('click', retryPlay);
-                            window.removeEventListener('keydown', retryPlay);
-                        };
-                        window.addEventListener('click', retryPlay);
-                        window.addEventListener('keydown', retryPlay);
-                    });
-            };
-
-            playAudio();
+            audioRef.current.play().catch(console.error);
         }
     }, [track, sinkId]);
 
@@ -145,8 +133,13 @@ function AudioPlayer({
 
 export default function RoomMonitorPage({ roomId }: Props) {
     return (
-        <AppLayout breadcrumbs={[{ title: 'Room Monitor', href: '#' }]}>
-            <Head title={`Monitor Room ${roomId}`} />
+        <AppLayout
+            breadcrumbs={[
+                { title: 'Dashboard', href: '/dashboard' },
+                { title: `Field Agent ${roomId}`, href: '#' },
+            ]}
+        >
+            <Head title={`Monitor ${roomId}`} />
             <RoomMonitor roomId={roomId} />
         </AppLayout>
     );
@@ -156,35 +149,39 @@ export function RoomMonitor({
     roomId,
     variant = 'full',
 }: Props & { variant?: 'full' | 'card' }) {
-    useEffect(() => {
-        console.log('[ADMIN] RoomMonitor v2.1 loaded');
-    }, []);
     const [tracks, setTracks] = useState<MediaTrack[]>([]);
-    const [activeAudioClientId, setActiveAudioClientId] = useState<
-        string | null
-    >(null);
 
-    // Group tracks by clientId
+    // Group tracks
     const clientStreams = tracks.reduce<Record<string, ClientStream>>(
         (acc, track) => {
             if (!acc[track.clientId]) {
                 acc[track.clientId] = { clientId: track.clientId };
             }
             if (track.kind === 'video') acc[track.clientId].video = track;
+
             if (track.kind === 'audio') acc[track.clientId].audio = track;
+            if (track.appData) {
+                acc[track.clientId].metadata = {
+                    ...acc[track.clientId].metadata,
+                    ...track.appData,
+                };
+            }
             return acc;
         },
         {},
     );
+
+    // WebRTC Refs
     const deviceRef = useRef<Device | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const recvTransportRef = useRef<any>(null);
-    const sendTransportRef = useRef<any>(null); // For Admin Talkback
-    const audioProducerRef = useRef<any>(null); // For Admin Talkback
+    const sendTransportRef = useRef<any>(null);
+    const audioProducerRef = useRef<any>(null);
     const consumersRef = useRef<Map<string, any>>(new Map());
     const pendingProducersRef = useRef<
         { producerId: string; clientId: string }[]
     >([]);
+    const producerClientIdMap = useRef<Map<string, string>>(new Map());
     const clientIdRef = useRef<string>('');
 
     if (!clientIdRef.current) {
@@ -201,16 +198,6 @@ export function RoomMonitor({
     const [connectionStatus, setConnectionStatus] = useState<
         'connected' | 'disconnected' | 'reconnecting'
     >('disconnected');
-    const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-    const [remoteAudioStates, setRemoteAudioStates] = useState<
-        Record<string, boolean>
-    >({});
-    const [remoteVideoStates, setRemoteVideoStates] = useState<
-        Record<string, boolean>
-    >({});
-    const [isInterrupted, setIsInterrupted] = useState(false);
-
-    // Device Management
     const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
     const [audioOutputDevices, setAudioOutputDevices] = useState<
         MediaDeviceInfo[]
@@ -219,17 +206,111 @@ export function RoomMonitor({
         useState<string>('');
     const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] =
         useState<string>('');
+    const [showSettings, setShowSettings] = useState(false);
+    const [isTalking, setIsTalking] = useState(false);
+    const [uptime, setUptime] = useState('00:00:00');
+    const [streamMetrics, setStreamMetrics] = useState({
+        bitrate: 0,
+        latency: 0,
+        fps: 0,
+        resolution: 'N/A',
+    });
+    const [recordings, setRecordings] = useState(MOCK_CLIPS);
 
+    const lastStatsRef = useRef<
+        Map<string, { timestamp: number; bytes: number }>
+    >(new Map());
+
+    // Real Stream Stats
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            let totalBitrate = 0;
+            let maxLatency = 0;
+            let fps = 0;
+            let resolution = 'N/A';
+            const now = Date.now();
+
+            for (const consumer of consumersRef.current.values()) {
+                try {
+                    const stats = await consumer.getStats();
+                    stats.forEach((report: any) => {
+                        if (report.type === 'inbound-rtp') {
+                            const bytes = report.bytesReceived;
+                            const last = lastStatsRef.current.get(consumer.id);
+                            if (last) {
+                                const duration = now - last.timestamp;
+                                if (duration > 0) {
+                                    const bits = (bytes - last.bytes) * 8;
+                                    const bitrate = bits / (duration / 1000); // bps
+                                    totalBitrate += bitrate;
+                                }
+                            }
+                            lastStatsRef.current.set(consumer.id, {
+                                timestamp: now,
+                                bytes,
+                            });
+
+                            if (report.kind === 'video') {
+                                fps = report.framesPerSecond || 0;
+                            }
+                        }
+                        if (
+                            report.type === 'candidate-pair' &&
+                            report.state === 'succeeded'
+                        ) {
+                            maxLatency =
+                                report.currentRoundTripTime * 1000 || 0;
+                        }
+                    });
+                } catch (e) {
+                    console.error('Failed to get stats:', e);
+                }
+            }
+
+            // Get resolution from track settings
+            const mainVideoTrack =
+                Object.values(clientStreams)[0]?.video?.track;
+            if (mainVideoTrack) {
+                const settings = mainVideoTrack.getSettings();
+                if (settings.width && settings.height) {
+                    resolution = `${settings.width}x${settings.height}`;
+                }
+            }
+
+            setStreamMetrics({
+                bitrate: parseFloat((totalBitrate / 1000000).toFixed(2)), // Mbps
+                latency: Math.round(maxLatency),
+                fps: Math.round(fps),
+                resolution,
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [clientStreams]);
+
+    // Uptime Timer
+    useEffect(() => {
+        const start = Date.now();
+        const interval = setInterval(() => {
+            const diff = Date.now() - start;
+            const h = Math.floor(diff / 3600000)
+                .toString()
+                .padStart(2, '0');
+            const m = Math.floor((diff % 3600000) / 60000)
+                .toString()
+                .padStart(2, '0');
+            const s = Math.floor((diff % 60000) / 1000)
+                .toString()
+                .padStart(2, '0');
+            setUptime(`${h}:${m}:${s}`);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // --- WebRTC Logic (Condensed) ---
     useEffect(() => {
         const getDevices = async () => {
             try {
-                // Request permission first to get labels
-                // Note: In a real app, you might want to do this only when user interacts
-                // but for admin dashboard it's often acceptable.
-                // However, to avoid annoying popups on load, we might just enumerate
-                // and if labels are empty, we ask for permission when they click "Talk"
-                // But to populate the dropdown, we need permission or at least enumeration.
-
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioInputs = devices.filter(
                     (d) => d.kind === 'audioinput',
@@ -237,6 +318,7 @@ export function RoomMonitor({
                 const audioOutputs = devices.filter(
                     (d) => d.kind === 'audiooutput',
                 );
+
                 setAudioDevices(audioInputs);
                 setAudioOutputDevices(audioOutputs);
 
@@ -247,17 +329,10 @@ export function RoomMonitor({
                     setSelectedAudioOutputDeviceId(audioOutputs[0].deviceId);
                 }
             } catch (e) {
-                console.error('[ADMIN] Failed to enumerate devices:', e);
+                console.error('Failed to enumerate devices:', e);
             }
         };
-
         getDevices();
-        navigator.mediaDevices.addEventListener('devicechange', getDevices);
-        return () =>
-            navigator.mediaDevices.removeEventListener(
-                'devicechange',
-                getDevices,
-            );
     }, []);
 
     useEffect(() => {
@@ -271,27 +346,24 @@ export function RoomMonitor({
             wsRef.current = ws;
 
             ws.onopen = () => {
-                console.log('[ADMIN] Connected to Mediasoup Server');
+                console.log('[ADMIN] Connected');
                 setConnectionStatus('connected');
-                // Join as viewer
-                const payload = {
-                    action: 'join-as-viewer',
-                    roomId: roomId,
-                    clientId: clientIdRef.current,
-                };
-                console.log('[ADMIN] Sending join-as-viewer:', payload);
-                ws?.send(JSON.stringify(payload));
+                ws?.send(
+                    JSON.stringify({
+                        action: 'join-as-viewer',
+                        roomId: roomId,
+                        clientId: clientIdRef.current,
+                    }),
+                );
             };
 
             ws.onmessage = async (event) => {
                 const msg = JSON.parse(event.data);
                 const { action, data } = msg;
-                console.log(`[ADMIN] WS RECV: ${action}`, data);
 
                 switch (action) {
                     case 'router-rtp-capabilities':
                         await loadDevice(data);
-                        // After loading device, create recv transport
                         ws?.send(
                             JSON.stringify({
                                 action: 'create-recv-transport',
@@ -300,98 +372,46 @@ export function RoomMonitor({
                             }),
                         );
                         break;
-
                     case 'create-recv-transport':
                         await createRecvTransport(data);
                         break;
-
                     case 'create-send-transport':
                         await createSendTransport(data);
                         break;
-
                     case 'existing-producers':
-                        // data is array of { id, kind }
-                        for (const producer of data) {
+                        for (const producer of data)
                             consumeProducer(producer.id, producer.clientId);
-                        }
                         break;
-
                     case 'new-producer':
-                        // data is { producerId, kind }
                         consumeProducer(data.producerId, data.clientId);
                         break;
-
                     case 'producer-closed':
-                        // data is { producerId }
                         setTracks((prev) =>
                             prev.filter(
                                 (s) => s.producerId !== data.producerId,
                             ),
                         );
                         break;
-
                     case 'consume-done':
                         await handleConsumeDone(data);
                         break;
-
-                    case 'transport-connected':
-                        // Transport connected successfully
-                        break;
-
-                    case 'restart-ice-done':
-                        await handleRestartIceDone(data);
-                        break;
-
                     case 'session-ended':
-                        console.warn(
-                            '[ADMIN] Session ended by server, reloading...',
-                        );
                         window.location.reload();
-                        break;
-
-                    case 'stream-interrupted':
-                        console.warn(
-                            '[ADMIN] Stream interrupted (network drop?)',
-                        );
-                        setIsInterrupted(true);
                         break;
                 }
             };
 
             ws.onclose = () => {
-                console.log('[ADMIN] WS Closed, reconnecting in 3s...');
+                console.log('[ADMIN] Disconnected');
                 setConnectionStatus('reconnecting');
-
-                // Close transport to prevent it from trying to restart ICE
-                if (recvTransportRef.current) {
-                    recvTransportRef.current.close();
-                    recvTransportRef.current = null;
-                }
-
                 reconnectTimeout = setTimeout(connect, 3000);
-            };
-
-            ws.onerror = (err) => {
-                console.error('[ADMIN] WS Error:', err);
-                ws?.close();
             };
         };
 
         connect();
-
         return () => {
-            if (ws) {
-                ws.onclose = null; // Prevent zombie reconnection
-                ws.close();
-            }
+            ws?.close();
             clearTimeout(reconnectTimeout);
-
-            // Reset refs on unmount/change
-            deviceRef.current = null;
-            recvTransportRef.current = null;
-            consumersRef.current = new Map();
-            pendingProducersRef.current = [];
-            setTracks([]);
         };
     }, [roomId]);
 
@@ -400,67 +420,141 @@ export function RoomMonitor({
             const device = new Device();
             await device.load({ routerRtpCapabilities });
             deviceRef.current = device;
-            console.log('Device loaded');
         } catch (error) {
             console.error('Failed to load device:', error);
+        }
+    };
+
+    const createRecvTransport = async (transportData: any) => {
+        const device = deviceRef.current;
+        if (!device) return;
+        const transport = device.createRecvTransport(transportData);
+        recvTransportRef.current = transport;
+
+        transport.on('connect', ({ dtlsParameters }, callback) => {
+            wsRef.current?.send(
+                JSON.stringify({
+                    action: 'connect-transport',
+                    roomId,
+                    clientId: clientIdRef.current,
+                    data: { transportId: transport.id, dtlsParameters },
+                }),
+            );
+            callback();
+        });
+
+        if (pendingProducersRef.current.length > 0) {
+            for (const {
+                producerId,
+                clientId,
+            } of pendingProducersRef.current) {
+                consumeProducer(producerId, clientId);
+            }
+            pendingProducersRef.current = [];
         }
     };
 
     const createSendTransport = async (transportData: any) => {
         const device = deviceRef.current;
         if (!device) return;
-
         const transport = device.createSendTransport(transportData);
         sendTransportRef.current = transport;
 
-        transport.on('connect', ({ dtlsParameters }, callback, errback) => {
+        transport.on('connect', ({ dtlsParameters }, callback) => {
             wsRef.current?.send(
                 JSON.stringify({
                     action: 'connect-transport',
                     roomId,
                     clientId: clientIdRef.current,
-                    data: {
-                        transportId: transport.id,
-                        dtlsParameters,
-                    },
+                    data: { transportId: transport.id, dtlsParameters },
                 }),
             );
             callback();
         });
 
-        transport.on(
-            'produce',
-            ({ kind, rtpParameters }, callback, errback) => {
-                wsRef.current?.send(
-                    JSON.stringify({
-                        action: 'produce',
-                        roomId,
-                        clientId: clientIdRef.current,
-                        data: {
-                            transportId: transport.id,
-                            kind,
-                            rtpParameters,
-                        },
-                    }),
-                );
+        transport.on('produce', ({ kind, rtpParameters }, callback) => {
+            wsRef.current?.send(
+                JSON.stringify({
+                    action: 'produce',
+                    roomId,
+                    clientId: clientIdRef.current,
+                    data: { transportId: transport.id, kind, rtpParameters },
+                }),
+            );
 
-                // Wait for produce-done
-                const handleProduceDone = (event: MessageEvent) => {
-                    const msg = JSON.parse(event.data);
-                    if (msg.action === 'produce-done') {
-                        callback({ id: msg.producerId });
-                        wsRef.current?.removeEventListener(
-                            'message',
-                            handleProduceDone,
-                        );
-                    }
-                };
-                wsRef.current?.addEventListener('message', handleProduceDone);
-            },
-        );
+            const handleProduceDone = (event: MessageEvent) => {
+                const msg = JSON.parse(event.data);
+                if (msg.action === 'produce-done') {
+                    callback({ id: msg.producerId });
+                    wsRef.current?.removeEventListener(
+                        'message',
+                        handleProduceDone,
+                    );
+                }
+            };
+            wsRef.current?.addEventListener('message', handleProduceDone);
+        });
     };
 
-    const [isTalking, setIsTalking] = useState(false);
+    const consumeProducer = (producerId: string, clientId: string) => {
+        const device = deviceRef.current;
+        const transport = recvTransportRef.current;
+        if (!device || !transport) {
+            pendingProducersRef.current.push({ producerId, clientId });
+            return;
+        }
+        wsRef.current?.send(
+            JSON.stringify({
+                action: 'consume',
+                roomId,
+                clientId: clientIdRef.current,
+                data: {
+                    transportId: transport.id,
+                    producerId,
+                    rtpCapabilities: device.rtpCapabilities,
+                    appData: { clientId },
+                },
+            }),
+        );
+        producerClientIdMap.current.set(producerId, clientId);
+    };
+
+    const handleConsumeDone = async (data: any) => {
+        const { id, producerId, kind, rtpParameters } = data;
+        const clientId =
+            producerClientIdMap.current.get(producerId) || 'unknown';
+        const transport = recvTransportRef.current;
+        if (!transport) return;
+        const consumer = await transport.consume({
+            id,
+            producerId,
+            kind,
+            rtpParameters,
+        });
+        consumersRef.current.set(consumer.id, consumer);
+
+        setTracks((prev) => {
+            // Check if we already have this track
+            if (prev.some((t) => t.id === consumer.id)) return prev;
+
+            const newTrack = {
+                id: consumer.id,
+                producerId,
+                kind,
+                track: consumer.track,
+                clientId,
+                appData: data.appData, // Store appData with the track
+            };
+            return [...prev, newTrack];
+        });
+
+        // Update client metadata if available
+        if (data.appData) {
+            // We need a way to store metadata separately or attach it to the client stream object
+            // Since clientStreams is derived from tracks, we can attach it to the track object
+            // and then extract it in the reducer.
+        }
+    };
 
     const startTalking = async () => {
         try {
@@ -472,7 +566,6 @@ export function RoomMonitor({
             const track = stream.getAudioTracks()[0];
 
             if (!sendTransportRef.current) {
-                // Request send transport
                 wsRef.current?.send(
                     JSON.stringify({
                         action: 'create-send-transport',
@@ -480,10 +573,6 @@ export function RoomMonitor({
                         clientId: clientIdRef.current,
                     }),
                 );
-
-                // Wait for transport to be created (this is a bit hacky, better to use a promise/event)
-                // For now, we rely on the WS handler calling createSendTransport
-                // We'll retry producing in a bit
                 setTimeout(async () => {
                     if (sendTransportRef.current) {
                         audioProducerRef.current =
@@ -498,13 +587,11 @@ export function RoomMonitor({
             }
         } catch (err) {
             console.error('Failed to start talking:', err);
-            alert('Could not access microphone');
         }
     };
 
     const stopTalking = () => {
         if (audioProducerRef.current) {
-            // Send close-producer to server
             wsRef.current?.send(
                 JSON.stringify({
                     action: 'close-producer',
@@ -513,315 +600,75 @@ export function RoomMonitor({
                     data: { producerId: audioProducerRef.current.id },
                 }),
             );
-
             audioProducerRef.current.close();
             audioProducerRef.current = null;
             setIsTalking(false);
         }
     };
 
-    const createRecvTransport = async (transportData: any) => {
-        const device = deviceRef.current;
-        if (!device) return;
-
-        const transport = device.createRecvTransport(transportData);
-        recvTransportRef.current = transport;
-
-        transport.on('connect', ({ dtlsParameters }, callback, errback) => {
-            wsRef.current?.send(
-                JSON.stringify({
-                    action: 'connect-transport',
-                    roomId,
-                    clientId: clientIdRef.current,
-                    data: {
-                        transportId: transport.id,
-                        dtlsParameters,
-                    },
-                }),
-            );
-            callback();
-        });
-
-        transport.on('connectionstatechange', (state) => {
-            console.log(
-                `[ADMIN] Recv Transport connection state changed: ${state}`,
-            );
-            if (state === 'connected') {
-                // Transport connected successfully
-            } else if (state === 'disconnected' || state === 'failed') {
-                console.warn(
-                    '[ADMIN] Transport disconnected or failed; closing WS to trigger reconnect.',
-                );
-                // Clean up transport
-                transport.close();
-                recvTransportRef.current = null;
-
-                // Close WS to trigger onclose and reconnect
-                if (
-                    wsRef.current &&
-                    wsRef.current.readyState === WebSocket.OPEN
-                ) {
-                    wsRef.current.close();
-                }
-            }
-        });
-
-        // Process pending producers
-        if (pendingProducersRef.current.length > 0) {
-            console.log(
-                `Processing ${pendingProducersRef.current.length} pending producers`,
-            );
-            for (const {
-                producerId,
-                clientId,
-            } of pendingProducersRef.current) {
-                consumeProducer(producerId, clientId);
-            }
-            pendingProducersRef.current = [];
-        }
-    };
-
-    const consumeProducer = (producerId: string, clientId: string) => {
-        const device = deviceRef.current;
-        const transport = recvTransportRef.current;
-        if (!device || !transport) {
-            console.warn(
-                'Device or transport not ready to consume, queueing producer',
-                producerId,
-            );
-            pendingProducersRef.current.push({ producerId, clientId });
-            return;
-        }
-
-        const rtpCapabilities = device.rtpCapabilities;
-
-        wsRef.current?.send(
-            JSON.stringify({
-                action: 'consume',
-                roomId,
-                clientId: clientIdRef.current,
-                data: {
-                    transportId: transport.id,
-                    producerId,
-                    rtpCapabilities,
-                    appData: { clientId },
-                },
-            }),
-        );
-        producerClientIdMap.current.set(producerId, clientId);
-    };
-
-    const producerClientIdMap = useRef<Map<string, string>>(new Map());
-
-    const handleConsumeDone = async (data: any) => {
-        const { id, producerId, kind, rtpParameters } = data;
-        const clientId =
-            producerClientIdMap.current.get(producerId) || 'unknown';
-        const transport = recvTransportRef.current;
-
-        if (!transport) return;
-
-        const consumer = await transport.consume({
-            id,
-            producerId,
-            kind,
-            rtpParameters,
-        });
-
-        consumersRef.current.set(consumer.id, consumer);
-
-        // Resume (server side resumed, but client side might need track handling)
-        const stream = new MediaStream();
-        stream.addTrack(consumer.track);
-
-        setTracks((prev) => [
-            ...prev,
-            {
-                id: consumer.id,
-                producerId,
-                kind,
-                track: consumer.track,
-                clientId,
-            },
-        ]);
-
-        // If we successfully consumed, the stream is back
-        setIsInterrupted(false);
-
-        console.log(`Consuming ${kind} from producer ${producerId}`);
-    };
-
-    const restartIce = (transportId: string) => {
-        wsRef.current?.send(
-            JSON.stringify({
-                action: 'restart-ice',
-                roomId,
-                clientId: clientIdRef.current,
-                data: { transportId },
-            }),
-        );
-    };
-
-    const handleRestartIceDone = async (data: any) => {
-        const { transportId, iceParameters } = data;
-        const transport = recvTransportRef.current;
-        if (transport && transport.id === transportId) {
-            console.log('[ADMIN] Restarting ICE with new parameters');
-            await transport.restartIce({ iceParameters });
-        }
-    };
-
-    console.log('RoomMonitor variant:', variant);
+    // --- Render ---
 
     if (variant === 'card') {
         return (
-            <div className="h-full w-full bg-black">
+            <div className="relative h-full w-full bg-black">
                 {Object.keys(clientStreams).length === 0 ? (
-                    <div className="flex h-full items-center justify-center text-gray-500">
-                        <div className="flex flex-col items-center gap-2">
-                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-500 border-t-white"></div>
-                            <span className="text-xs">Connecting...</span>
-                        </div>
+                    <div className="flex h-full items-center justify-center text-zinc-500">
+                        <span className="text-xs">Connecting...</span>
                     </div>
                 ) : (
-                    <div
-                        className={`grid h-full w-full ${Object.keys(clientStreams).length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}
-                    >
+                    <div className="grid h-full w-full grid-cols-1">
                         {Object.values(clientStreams).map((client) => (
                             <div
                                 key={client.clientId}
                                 className="relative h-full w-full overflow-hidden"
                             >
-                                {client.video ? (
+                                {client.video && (
                                     <VideoPlayer
                                         track={client.video.track}
                                         controls={false}
-                                        muted={true} // Always muted in card view for now
+                                        muted={true}
                                     />
-                                ) : (
-                                    <div className="flex h-full items-center justify-center bg-gray-900 text-white">
-                                        No Video
-                                    </div>
                                 )}
-                                {/* Admin Controls Overlay */}
-                                <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                const isMuted =
-                                                    remoteAudioStates[
-                                                        client.clientId
-                                                    ] || false;
-                                                const newMuted = !isMuted;
-                                                setRemoteAudioStates(
-                                                    (prev) => ({
-                                                        ...prev,
-                                                        [client.clientId]:
-                                                            newMuted,
-                                                    }),
-                                                );
-                                                wsRef.current?.send(
-                                                    JSON.stringify({
-                                                        action: 'admin-action',
-                                                        roomId,
-                                                        targetClientId:
-                                                            client.clientId,
-                                                        actionType: newMuted
-                                                            ? 'mute-audio'
-                                                            : 'unmute-audio',
-                                                    }),
-                                                );
-                                            }}
-                                            className={`rounded p-1.5 text-white ${remoteAudioStates[client.clientId] ? 'bg-red-500/80' : 'bg-black/50 hover:bg-black/70'}`}
-                                            title={
-                                                remoteAudioStates[
-                                                    client.clientId
-                                                ]
-                                                    ? 'Unmute Remote Mic'
-                                                    : 'Mute Remote Mic'
-                                            }
-                                        >
-                                            {remoteAudioStates[
-                                                client.clientId
-                                            ] ? (
-                                                <MicOff size={16} />
-                                            ) : (
-                                                <Mic size={16} />
-                                            )}
-                                        </button>
 
-                                        <button
-                                            onClick={() => {
-                                                const isMuted =
-                                                    remoteVideoStates[
-                                                        client.clientId
-                                                    ] || false;
-                                                const newMuted = !isMuted;
-                                                setRemoteVideoStates(
-                                                    (prev) => ({
-                                                        ...prev,
-                                                        [client.clientId]:
-                                                            newMuted,
-                                                    }),
-                                                );
-                                                wsRef.current?.send(
-                                                    JSON.stringify({
-                                                        action: 'admin-action',
-                                                        roomId,
-                                                        targetClientId:
-                                                            client.clientId,
-                                                        actionType: newMuted
-                                                            ? 'mute-video'
-                                                            : 'unmute-video',
-                                                    }),
-                                                );
-                                            }}
-                                            className={`rounded p-1.5 text-white ${remoteVideoStates[client.clientId] ? 'bg-red-500/80' : 'bg-black/50 hover:bg-black/70'}`}
-                                            title={
-                                                remoteVideoStates[
-                                                    client.clientId
-                                                ]
-                                                    ? 'Enable Remote Camera'
-                                                    : 'Disable Remote Camera'
-                                            }
-                                        >
-                                            {remoteVideoStates[
-                                                client.clientId
-                                            ] ? (
-                                                <VideoOff size={16} />
-                                            ) : (
-                                                <Video size={16} />
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick={() => {
-                                                if (
-                                                    confirm(
-                                                        'Force reload remote client?',
-                                                    )
-                                                ) {
-                                                    wsRef.current?.send(
-                                                        JSON.stringify({
-                                                            action: 'admin-action',
-                                                            roomId,
-                                                            targetClientId:
-                                                                client.clientId,
-                                                            actionType:
-                                                                'reload',
-                                                        }),
-                                                    );
-                                                }
-                                            }}
-                                            className="rounded bg-black/50 p-1.5 text-white hover:bg-red-600/80"
-                                            title="Force Reload Remote Client"
-                                        >
-                                            <RefreshCw size={16} />
-                                        </button>
+                                {/* Overlays */}
+                                <div className="absolute inset-0 flex flex-col justify-between p-3">
+                                    {/* Top Row */}
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-1.5 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                                            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></div>
+                                            REC
+                                        </div>
+                                        <div className="rounded bg-black/40 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+                                            {streamMetrics.resolution !== 'N/A'
+                                                ? streamMetrics.resolution.split(
+                                                      'x',
+                                                  )[1] + 'p'
+                                                : '720p'}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-                                    {client.clientId.slice(0, 6)}
+
+                                    {/* Bottom Row */}
+                                    <div className="flex items-end justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-xs font-bold text-white drop-shadow-md">
+                                                Field Agent {roomId}
+                                            </span>
+                                            <span className="text-[10px] font-medium text-zinc-300 drop-shadow-md">
+                                                client-
+                                                {client.clientId.slice(0, 4)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-green-400 drop-shadow-md">
+                                            <BarChart3 className="h-3 w-3" />
+                                            <span>
+                                                {Math.round(
+                                                    streamMetrics.bitrate *
+                                                        1000,
+                                                )}
+                                                kbps
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -831,274 +678,353 @@ export function RoomMonitor({
         );
     }
 
+    // Get the first active client for the main view (Focus Mode)
+    const mainClient = Object.values(clientStreams)[0];
+
     return (
-        <div className="h-full p-6">
-            <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Room:{' '}
-                    <span className="font-mono text-blue-600 dark:text-blue-400">
-                        {roomId}
-                    </span>
-                </h2>
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <select
-                            value={selectedAudioDeviceId}
-                            onChange={(e) =>
-                                setSelectedAudioDeviceId(e.target.value)
-                            }
-                            className="rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                        >
-                            {audioDevices.map((device) => (
-                                <option
-                                    key={device.deviceId}
-                                    value={device.deviceId}
-                                >
-                                    {device.label ||
-                                        `Mic ${device.deviceId.slice(0, 5)}...`}
-                                </option>
-                            ))}
-                        </select>
-
-                        {/* Speaker Selection */}
-                        {audioOutputDevices.length > 0 && (
-                            <select
-                                className="max-w-[150px] rounded bg-gray-700 px-3 py-2 text-sm text-white"
-                                value={selectedAudioOutputDeviceId}
-                                onChange={(e) =>
-                                    setSelectedAudioOutputDeviceId(
-                                        e.target.value,
-                                    )
-                                }
+        <div className="flex h-[calc(100vh-4rem)] bg-zinc-950 text-zinc-100">
+            {/* Main Content Area */}
+            <div className="flex flex-1 flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-3">
+                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                        <span className="font-medium text-white">{roomId}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button className="flex items-center gap-2 rounded bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">
+                            <Square className="h-3 w-3 fill-current" />
+                            STOP RECORDING
+                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowSettings(!showSettings)}
+                                className={`rounded p-1.5 hover:bg-zinc-800 hover:text-white ${showSettings ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}
                             >
-                                {audioOutputDevices.map((device) => (
-                                    <option
-                                        key={device.deviceId}
-                                        value={device.deviceId}
-                                    >
-                                        {device.label ||
-                                            `Speaker ${device.deviceId}`}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-                    </div>
-                    <button
-                        onMouseDown={startTalking}
-                        onMouseUp={stopTalking}
-                        onMouseLeave={stopTalking}
-                        className={`flex items-center gap-2 rounded-full px-4 py-2 font-bold text-white transition-all ${
-                            isTalking
-                                ? 'scale-105 bg-red-600 shadow-lg'
-                                : 'bg-blue-600 hover:bg-blue-700'
-                        }`}
-                    >
-                        {isTalking ? (
-                            <Mic className="animate-pulse" />
-                        ) : (
-                            <MicOff />
-                        )}
-                        {isTalking ? 'Broadcasting...' : 'Hold to Talk'}
-                    </button>
-                    <span
-                        className={`rounded-full px-3 py-1 text-sm font-medium ${
-                            connectionStatus === 'connected'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : connectionStatus === 'reconnecting'
-                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                        }`}
-                    >
-                        {connectionStatus === 'connected'
-                            ? 'Active'
-                            : connectionStatus === 'reconnecting'
-                              ? 'Reconnecting...'
-                              : 'Disconnected'}
-                    </span>
-                </div>
-            </div>
-            <div
-                className={`grid h-full w-full gap-6 ${
-                    Object.keys(clientStreams).length === 1
-                        ? 'grid-cols-1'
-                        : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                }`}
-            >
-                {Object.keys(clientStreams).length === 0 && (
-                    <div className="col-span-full flex h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-                        <div className="mb-4 h-12 w-12 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
-                        <p className="text-lg font-medium">
-                            Waiting for streams...
-                        </p>
-                        <p className="text-sm">
-                            Streams will appear here automatically
-                        </p>
-                    </div>
-                )}
+                                <Settings className="h-4 w-4" />
+                            </button>
 
-                {Object.values(clientStreams).map((client) => (
-                    <div
-                        key={client.clientId}
-                        className={`overflow-hidden rounded-xl bg-white shadow-lg ring-1 transition-all ${
-                            activeAudioClientId === client.clientId
-                                ? 'ring-2 shadow-blue-500/20 ring-blue-500'
-                                : 'ring-gray-200 dark:ring-gray-700'
-                        } dark:bg-gray-800`}
-                        onClick={() => {
-                            console.log(
-                                '[RoomMonitor] Card clicked. Current active:',
-                                activeAudioClientId,
-                                'Clicked:',
-                                client.clientId,
-                            );
-                            setActiveAudioClientId(
-                                client.clientId === activeAudioClientId
-                                    ? null
-                                    : client.clientId,
-                            );
-                        }}
-                    >
-                        <div
-                            className={`group relative cursor-pointer bg-black ${
-                                Object.keys(clientStreams).length === 1
-                                    ? 'h-[calc(100vh-12rem)] w-full'
-                                    : 'aspect-video'
-                            }`}
-                        >
-                            {client.video ? (
-                                <VideoPlayer
-                                    track={client.video.track}
-                                    muted={true} // Video element always muted, we use Audio element for sound
-                                />
-                            ) : (
-                                <div className="flex h-full items-center justify-center text-gray-500">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <svg
-                                            className="h-12 w-12"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={1.5}
-                                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                            />
-                                        </svg>
-                                        <span>No Video</span>
-                                    </div>
-                                </div>
-                            )}
+                            {/* Settings Popup */}
+                            {showSettings && (
+                                <div className="absolute top-full right-0 z-50 mt-2 w-64 rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
+                                    <h3 className="mb-3 text-sm font-medium text-white">
+                                        Audio Settings
+                                    </h3>
 
-                            {/* Audio Player (Invisible) */}
-                            {client.audio && (
-                                <AudioPlayer
-                                    track={client.audio.track}
-                                    muted={
-                                        activeAudioClientId !== client.clientId
-                                    }
-                                    sinkId={selectedAudioOutputDeviceId}
-                                />
-                            )}
+                                    <div className="space-y-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs text-zinc-400">
+                                                Microphone
+                                            </label>
+                                            <select
+                                                value={selectedAudioDeviceId}
+                                                onChange={(e) =>
+                                                    setSelectedAudioDeviceId(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                className="w-full rounded bg-zinc-800 px-2 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                                            >
+                                                {audioDevices.map((device) => (
+                                                    <option
+                                                        key={device.deviceId}
+                                                        value={device.deviceId}
+                                                    >
+                                                        {device.label ||
+                                                            `Microphone ${device.deviceId.slice(0, 5)}...`}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
 
-                            <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                                <span className="rounded bg-black/60 px-2 py-1 font-mono text-xs text-white backdrop-blur-sm">
-                                    ID: {client.clientId.slice(0, 8)}
-                                </span>
-                                {client.audio && (
-                                    <div className="rounded bg-black/60 px-2 py-1 backdrop-blur-sm">
-                                        <AudioLevelIndicator
-                                            track={client.audio.track}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Audio Indicator */}
-                            <div className="absolute top-3 right-3">
-                                <div
-                                    className={`rounded-full p-2 backdrop-blur-sm transition-colors ${
-                                        activeAudioClientId === client.clientId
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-black/40 text-white/70 group-hover:bg-black/60'
-                                    }`}
-                                >
-                                    {activeAudioClientId === client.clientId ? (
-                                        <svg
-                                            className="h-4 w-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                            />
-                                        </svg>
-                                    ) : (
-                                        <svg
-                                            className="h-4 w-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                            />
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                                            />
-                                        </svg>
-                                    )}
-                                </div>
-                            </div>
-
-                            {isInterrupted && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                                    <div className="flex flex-col items-center gap-2 text-yellow-500">
-                                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-yellow-500 border-t-transparent"></div>
-                                        <span className="font-bold">
-                                            Reconnecting...
-                                        </span>
+                                        {audioOutputDevices.length > 0 && (
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs text-zinc-400">
+                                                    Speaker
+                                                </label>
+                                                <select
+                                                    value={
+                                                        selectedAudioOutputDeviceId
+                                                    }
+                                                    onChange={(e) =>
+                                                        setSelectedAudioOutputDeviceId(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="w-full rounded bg-zinc-800 px-2 py-1.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                                                >
+                                                    {audioOutputDevices.map(
+                                                        (device) => (
+                                                            <option
+                                                                key={
+                                                                    device.deviceId
+                                                                }
+                                                                value={
+                                                                    device.deviceId
+                                                                }
+                                                            >
+                                                                {device.label ||
+                                                                    `Speaker ${device.deviceId.slice(0, 5)}...`}
+                                                            </option>
+                                                        ),
+                                                    )}
+                                                </select>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
                         </div>
-                        <div className="p-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                    Client {client.clientId.slice(0, 4)}
-                                </span>
-                                <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                    {client.video && (
-                                        <span className="text-green-500">
-                                            Video
-                                        </span>
-                                    )}
-                                    {client.audio && (
-                                        <div className="flex items-center gap-2">
-                                            <AudioLevelIndicator
-                                                track={client.audio.track}
-                                            />
-                                            <span className="text-blue-500">
-                                                Audio
+                    </div>
+                </div>
+
+                {/* Video Area */}
+                <div className="flex-1 overflow-hidden bg-black p-4">
+                    <div className="relative h-full w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
+                        {mainClient?.video ? (
+                            <VideoPlayer
+                                track={mainClient.video.track}
+                                controls={false}
+                                muted={true}
+                            />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-zinc-600">
+                                <div className="flex flex-col items-center gap-2">
+                                    <Wifi className="h-12 w-12 opacity-20" />
+                                    <span>Waiting for stream...</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Audio (Hidden) */}
+                        {mainClient?.audio && (
+                            <AudioPlayer
+                                track={mainClient.audio.track}
+                                muted={false}
+                                sinkId={selectedAudioOutputDeviceId}
+                            />
+                        )}
+
+                        {/* Overlays */}
+                        <div className="absolute inset-0 flex flex-col justify-between p-6">
+                            <div className="flex justify-end">
+                                <div
+                                    className={`flex items-center gap-2 rounded bg-black/50 px-3 py-1.5 backdrop-blur-md ${connectionStatus === 'connected' ? 'text-green-500' : 'text-red-500'}`}
+                                >
+                                    <Wifi className="h-4 w-4" />
+                                </div>
+                            </div>
+
+                            <div className="flex items-end justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-white shadow-black drop-shadow-md">
+                                        Field Agent {roomId}
+                                    </h2>
+                                    <div className="mt-1 flex items-center gap-4 text-sm font-medium text-zinc-300 shadow-black drop-shadow-md">
+                                        <div className="flex items-center gap-1.5">
+                                            <Clock className="h-4 w-4" />
+                                            <span>{uptime} uptime</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-green-400">
+                                            <Activity className="h-4 w-4" />
+                                            <span>
+                                                {streamMetrics.resolution}{' '}
+                                                {streamMetrics.fps}fps
                                             </span>
                                         </div>
-                                    )}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onMouseDown={startTalking}
+                                        onMouseUp={stopTalking}
+                                        onMouseLeave={stopTalking}
+                                        className={`flex items-center gap-2 rounded-lg px-6 py-2.5 font-bold text-white transition-all ${
+                                            isTalking
+                                                ? 'bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.5)]'
+                                                : 'bg-indigo-600 hover:bg-indigo-700'
+                                        }`}
+                                    >
+                                        {isTalking ? (
+                                            <Mic className="h-4 w-4 animate-pulse" />
+                                        ) : (
+                                            <MicOff className="h-4 w-4" />
+                                        )}
+                                        {isTalking
+                                            ? 'Speaking...'
+                                            : 'Talk Back'}
+                                    </button>
+                                    <button className="rounded-lg bg-black/50 p-2.5 text-white backdrop-blur-md hover:bg-black/70">
+                                        <Maximize2 className="h-5 w-5" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                ))}
+                </div>
+            </div>
+
+            {/* Right Info Panel */}
+            <div className="flex w-80 flex-col border-l border-zinc-800 bg-zinc-900">
+                {/* Stream Health */}
+                <div className="border-b border-zinc-800 p-4">
+                    <h3 className="mb-4 text-xs font-bold tracking-wider text-zinc-500 uppercase">
+                        Stream Health
+                    </h3>
+                    <div className="mb-4 h-24 w-full rounded bg-zinc-900/50 p-2">
+                        {/* Mock Graph */}
+                        <svg
+                            className="h-full w-full"
+                            viewBox="0 0 100 40"
+                            preserveAspectRatio="none"
+                        >
+                            <path
+                                d="M0 35 Q 10 30, 20 32 T 40 25 T 60 28 T 80 20 T 100 22"
+                                fill="none"
+                                stroke="#10b981"
+                                strokeWidth="2"
+                                vectorEffect="non-scaling-stroke"
+                            />
+                            <path
+                                d="M0 35 Q 10 30, 20 32 T 40 25 T 60 28 T 80 20 T 100 22 V 40 H 0 Z"
+                                fill="url(#gradient)"
+                                opacity="0.2"
+                            />
+                            <defs>
+                                <linearGradient
+                                    id="gradient"
+                                    x1="0"
+                                    y1="0"
+                                    x2="0"
+                                    y2="1"
+                                >
+                                    <stop offset="0%" stopColor="#10b981" />
+                                    <stop
+                                        offset="100%"
+                                        stopColor="#10b981"
+                                        stopOpacity="0"
+                                    />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded bg-zinc-800/50 p-3">
+                            <div className="text-xs text-zinc-500">Bitrate</div>
+                            <div className="font-mono text-sm font-medium text-green-400">
+                                {streamMetrics.bitrate} Mbps
+                            </div>
+                        </div>
+                        <div className="rounded bg-zinc-800/50 p-3">
+                            <div className="text-xs text-zinc-500">Latency</div>
+                            <div className="font-mono text-sm font-medium text-zinc-300">
+                                {streamMetrics.latency} ms
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Source Info */}
+                <div className="border-b border-zinc-800 p-4">
+                    <h3 className="mb-4 text-xs font-bold tracking-wider text-zinc-500 uppercase">
+                        Source Info
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                            <span className="text-zinc-500">IP Address</span>
+                            <span className="font-mono text-zinc-300">
+                                192.168.1.11
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-zinc-500">OS</span>
+                            <span className="text-zinc-300">
+                                macOS 14.2 (ARM64)
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-zinc-500">Browser</span>
+                            <span className="text-zinc-300">Chrome 120.0</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-zinc-500">Protocol</span>
+                            <span className="text-zinc-300">WebRTC (UDP)</span>
+                        </div>
+                        {mainClient?.metadata && (
+                            <>
+                                <div className="flex justify-between">
+                                    <span className="text-zinc-500">OS</span>
+                                    <span className="text-zinc-300">
+                                        {mainClient.metadata.os || 'Unknown'}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-zinc-500">
+                                        Browser
+                                    </span>
+                                    <span className="text-zinc-300">
+                                        {mainClient.metadata.browser ||
+                                            'Unknown'}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-zinc-500">IP</span>
+                                    <span className="font-mono text-zinc-300">
+                                        {mainClient.metadata.ip || 'Unknown'}
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Recent Clips */}
+                <div className="flex-1 overflow-y-auto p-4">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
+                            Recent Clips (53)
+                        </h3>
+                    </div>
+                    <div className="space-y-3">
+                        {recordings.map((clip) => (
+                            <div
+                                key={clip.id}
+                                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-800/30 p-2 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
+                            >
+                                <button className="flex h-8 w-8 items-center justify-center rounded bg-zinc-800 text-indigo-400 hover:bg-indigo-600 hover:text-white">
+                                    <Play className="h-3 w-3 fill-current" />
+                                </button>
+                                <div className="flex-1 overflow-hidden">
+                                    <div className="truncate text-xs font-medium text-zinc-300">
+                                        {clip.name}
+                                    </div>
+                                    <div className="text-[10px] text-zinc-500">
+                                        {clip.date} • {clip.size}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() =>
+                                        setRecordings((prev) =>
+                                            prev.filter(
+                                                (r) => r.id !== clip.id,
+                                            ),
+                                        )
+                                    }
+                                    className="text-zinc-500 hover:text-red-400"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-zinc-800 p-4">
+                    <button className="w-full rounded bg-zinc-800 py-3 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white">
+                        TERMINATE SESSION
+                    </button>
+                </div>
             </div>
         </div>
     );

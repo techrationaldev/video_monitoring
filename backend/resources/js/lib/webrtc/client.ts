@@ -225,6 +225,7 @@ export class ClientWebRTC {
                         transportId: this.sendTransport.id,
                         kind,
                         rtpParameters,
+                        appData: (arguments[0] as any).appData,
                     },
                 });
 
@@ -253,7 +254,7 @@ export class ClientWebRTC {
         );
     }
 
-    async produceStream(stream: MediaStream) {
+    async produceStream(stream: MediaStream, metadata: any = {}) {
         await this.transportReadyPromise;
 
         if (!this.sendTransport) {
@@ -267,6 +268,7 @@ export class ClientWebRTC {
             console.log('[CLIENT] Producing video track...');
             this.videoProducer = await this.sendTransport.produce({
                 track: videoTrack,
+                appData: { ...metadata, source: 'webcam' },
             });
             this.producers.set('video', this.videoProducer);
         }
@@ -277,6 +279,7 @@ export class ClientWebRTC {
             console.log('[CLIENT] Producing audio track...');
             this.audioProducer = await this.sendTransport.produce({
                 track: audioTrack,
+                appData: { ...metadata, source: 'mic' },
             });
             this.producers.set('audio', this.audioProducer);
         }

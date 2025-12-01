@@ -1,14 +1,25 @@
 <?php
 
 use App\Http\Controllers\Admin\ClientController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::get('/', function () {
-    return Inertia::render('welcome', [
-        'canRegister' => Features::enabled(Features::registration()),
-    ]);
+    if (!Auth::check()) {
+        return Inertia::render('welcome', [
+            'canRegister' => Features::enabled(Features::registration()),
+        ]);
+    }
+
+    /** @var \App\Models\User $user */
+    $user = Auth::user();
+    if ($user->hasRole('admin')) {
+        return redirect()->route('dashboard');
+    }
+
+    return Inertia::render('client/stream/index');
 })->name('home');
 
 Route::middleware(['auth', 'verified', 'role:admin'])->group(function () {

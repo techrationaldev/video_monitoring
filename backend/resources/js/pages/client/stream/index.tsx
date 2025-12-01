@@ -25,9 +25,14 @@ export default function ClientStreamPage() {
     // Device State
     const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
     const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+    const [audioOutputDevices, setAudioOutputDevices] = useState<
+        MediaDeviceInfo[]
+    >([]);
     const [selectedVideoDeviceId, setSelectedVideoDeviceId] =
         useState<string>('');
     const [selectedAudioDeviceId, setSelectedAudioDeviceId] =
+        useState<string>('');
+    const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] =
         useState<string>('');
 
     useEffect(() => {
@@ -40,14 +45,20 @@ export default function ClientStreamPage() {
                 const audioInputs = devices.filter(
                     (d) => d.kind === 'audioinput',
                 );
+                const audioOutputs = devices.filter(
+                    (d) => d.kind === 'audiooutput',
+                );
                 setVideoDevices(videoInputs);
                 setAudioDevices(audioInputs);
+                setAudioOutputDevices(audioOutputs);
 
                 // Set initial selection based on current stream if possible, or defaults
-                if (videoInputs.length > 0)
+                if (videoInputs.length > 0 && !selectedVideoDeviceId)
                     setSelectedVideoDeviceId(videoInputs[0].deviceId);
-                if (audioInputs.length > 0)
+                if (audioInputs.length > 0 && !selectedAudioDeviceId)
                     setSelectedAudioDeviceId(audioInputs[0].deviceId);
+                if (audioOutputs.length > 0 && !selectedAudioOutputDeviceId)
+                    setSelectedAudioOutputDeviceId(audioOutputs[0].deviceId);
             } catch (e) {
                 console.error('[PAGE] Failed to enumerate devices:', e);
             }
@@ -322,6 +333,23 @@ export default function ClientStreamPage() {
         return <StreamSetup onReady={handleStreamReady} />;
     }
 
+    const changeAudioOutput = async (deviceId: string) => {
+        try {
+            if (
+                remoteAudioRef.current &&
+                'setSinkId' in remoteAudioRef.current
+            ) {
+                // @ts-ignore
+                await remoteAudioRef.current.setSinkId(deviceId);
+                setSelectedAudioOutputDeviceId(deviceId);
+            } else {
+                console.warn('Audio output selection not supported');
+            }
+        } catch (e) {
+            console.error('Failed to set audio output device:', e);
+        }
+    };
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6 dark:bg-gray-900">
             <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800">
@@ -522,6 +550,31 @@ export default function ClientStreamPage() {
                                 ))}
                             </select>
                         </div>
+                        {/* Speaker Selection */}
+                        {audioOutputDevices.length > 0 && (
+                            <div className="min-w-[200px] flex-1">
+                                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Speaker
+                                </label>
+                                <select
+                                    className="w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                    value={selectedAudioOutputDeviceId}
+                                    onChange={(e) =>
+                                        changeAudioOutput(e.target.value)
+                                    }
+                                >
+                                    {audioOutputDevices.map((device) => (
+                                        <option
+                                            key={device.deviceId}
+                                            value={device.deviceId}
+                                        >
+                                            {device.label ||
+                                                `Speaker ${device.deviceId.slice(0, 5)}...`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">

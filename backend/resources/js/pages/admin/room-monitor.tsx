@@ -57,9 +57,11 @@ function VideoPlayer({
 function AudioPlayer({
     track,
     muted,
+    sinkId,
 }: {
     track: MediaStreamTrack;
     muted: boolean;
+    sinkId?: string;
 }) {
     const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -87,6 +89,13 @@ function AudioPlayer({
             );
             const stream = new MediaStream([track]);
             audioRef.current.srcObject = stream;
+
+            if (sinkId && 'setSinkId' in audioRef.current) {
+                // @ts-ignore
+                audioRef.current.setSinkId(sinkId).catch((err) => {
+                    console.error('Failed to set audio sink ID:', err);
+                });
+            }
 
             const playAudio = () => {
                 audioRef.current
@@ -129,7 +138,7 @@ function AudioPlayer({
 
             playAudio();
         }
-    }, [track]);
+    }, [track, sinkId]);
 
     return <audio ref={audioRef} autoPlay muted={muted} />;
 }
@@ -203,7 +212,12 @@ export function RoomMonitor({
 
     // Device Management
     const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+    const [audioOutputDevices, setAudioOutputDevices] = useState<
+        MediaDeviceInfo[]
+    >([]);
     const [selectedAudioDeviceId, setSelectedAudioDeviceId] =
+        useState<string>('');
+    const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] =
         useState<string>('');
 
     useEffect(() => {
@@ -220,10 +234,17 @@ export function RoomMonitor({
                 const audioInputs = devices.filter(
                     (d) => d.kind === 'audioinput',
                 );
+                const audioOutputs = devices.filter(
+                    (d) => d.kind === 'audiooutput',
+                );
                 setAudioDevices(audioInputs);
+                setAudioOutputDevices(audioOutputs);
 
                 if (audioInputs.length > 0 && !selectedAudioDeviceId) {
                     setSelectedAudioDeviceId(audioInputs[0].deviceId);
+                }
+                if (audioOutputs.length > 0 && !selectedAudioOutputDeviceId) {
+                    setSelectedAudioOutputDeviceId(audioOutputs[0].deviceId);
                 }
             } catch (e) {
                 console.error('[ADMIN] Failed to enumerate devices:', e);
@@ -838,6 +859,29 @@ export function RoomMonitor({
                                 </option>
                             ))}
                         </select>
+
+                        {/* Speaker Selection */}
+                        {audioOutputDevices.length > 0 && (
+                            <select
+                                className="max-w-[150px] rounded bg-gray-700 px-3 py-2 text-sm text-white"
+                                value={selectedAudioOutputDeviceId}
+                                onChange={(e) =>
+                                    setSelectedAudioOutputDeviceId(
+                                        e.target.value,
+                                    )
+                                }
+                            >
+                                {audioOutputDevices.map((device) => (
+                                    <option
+                                        key={device.deviceId}
+                                        value={device.deviceId}
+                                    >
+                                        {device.label ||
+                                            `Speaker ${device.deviceId}`}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                     <button
                         onMouseDown={startTalking}
@@ -954,6 +998,7 @@ export function RoomMonitor({
                                     muted={
                                         activeAudioClientId !== client.clientId
                                     }
+                                    sinkId={selectedAudioOutputDeviceId}
                                 />
                             )}
 

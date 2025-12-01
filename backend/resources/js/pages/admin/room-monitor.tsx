@@ -215,6 +215,9 @@ export function RoomMonitor({
         fps: 0,
         resolution: 'N/A',
     });
+    const [networkQuality, setNetworkQuality] = useState<
+        'Excellent' | 'Good' | 'Poor'
+    >('Excellent');
     const [recordings, setRecordings] = useState(MOCK_CLIPS);
 
     const lastStatsRef = useRef<
@@ -281,8 +284,12 @@ export function RoomMonitor({
                 bitrate: parseFloat((totalBitrate / 1000000).toFixed(2)), // Mbps
                 latency: Math.round(maxLatency),
                 fps: Math.round(fps),
-                resolution,
+                resolution: resolution !== 'N/A' ? resolution : '720p', // Fallback
             });
+
+            if (maxLatency < 100) setNetworkQuality('Excellent');
+            else if (maxLatency < 300) setNetworkQuality('Good');
+            else setNetworkQuality('Poor');
         }, 1000);
 
         return () => clearInterval(interval);
@@ -810,7 +817,15 @@ export function RoomMonitor({
                                 <div
                                     className={`flex items-center gap-2 rounded bg-black/50 px-3 py-1.5 backdrop-blur-md ${connectionStatus === 'connected' ? 'text-green-500' : 'text-red-500'}`}
                                 >
-                                    <Wifi className="h-4 w-4" />
+                                    <Wifi
+                                        className={`h-4 w-4 ${
+                                            networkQuality === 'Excellent'
+                                                ? 'text-green-500'
+                                                : networkQuality === 'Good'
+                                                  ? 'text-yellow-500'
+                                                  : 'text-red-500'
+                                        }`}
+                                    />
                                 </div>
                             </div>
 
@@ -930,26 +945,6 @@ export function RoomMonitor({
                         Source Info
                     </h3>
                     <div className="space-y-3 text-sm">
-                        <div className="flex justify-between">
-                            <span className="text-zinc-500">IP Address</span>
-                            <span className="font-mono text-zinc-300">
-                                192.168.1.11
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-zinc-500">OS</span>
-                            <span className="text-zinc-300">
-                                macOS 14.2 (ARM64)
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-zinc-500">Browser</span>
-                            <span className="text-zinc-300">Chrome 120.0</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-zinc-500">Protocol</span>
-                            <span className="text-zinc-300">WebRTC (UDP)</span>
-                        </div>
                         {mainClient?.metadata && (
                             <>
                                 <div className="flex justify-between">

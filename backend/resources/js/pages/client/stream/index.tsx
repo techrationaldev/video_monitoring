@@ -48,6 +48,9 @@ export default function ClientStreamPage() {
 
     // Session Timer
     const [sessionDuration, setSessionDuration] = useState(0);
+    const [networkQuality, setNetworkQuality] = useState<
+        'Excellent' | 'Good' | 'Poor'
+    >('Excellent');
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -234,6 +237,42 @@ export default function ClientStreamPage() {
                 console.error('[PAGE] Failed to join room API:', err),
             );
     };
+
+    // Network Quality Monitoring
+    useEffect(() => {
+        if (!connected || !clientRef) return;
+
+        const interval = setInterval(async () => {
+            // @ts-ignore
+            if (clientRef.sendTransport) {
+                // @ts-ignore
+                const stats = await clientRef.sendTransport.getStats();
+                let rtt = 0;
+                let packetLoss = 0;
+
+                stats.forEach((report: any) => {
+                    if (
+                        report.type === 'candidate-pair' &&
+                        report.state === 'succeeded'
+                    ) {
+                        rtt = report.currentRoundTripTime * 1000;
+                    }
+                    if (
+                        report.type === 'outbound-rtp' &&
+                        report.kind === 'video'
+                    ) {
+                        // Simple packet loss estimation if available
+                    }
+                });
+
+                if (rtt < 100) setNetworkQuality('Excellent');
+                else if (rtt < 300) setNetworkQuality('Good');
+                else setNetworkQuality('Poor');
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [connected, clientRef]);
 
     useEffect(() => {
         if (localVideoRef.current && mediaStream) {
@@ -449,7 +488,7 @@ export default function ClientStreamPage() {
                     <div className="flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 backdrop-blur-md">
                         <Signal className="h-3.5 w-3.5 text-green-500" />
                         <span className="text-xs font-medium text-green-500">
-                            Excellent
+                            {networkQuality}
                         </span>
                     </div>
                 </div>

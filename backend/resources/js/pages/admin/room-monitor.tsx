@@ -483,6 +483,16 @@ export function RoomMonitor({
 
     const stopTalking = () => {
         if (audioProducerRef.current) {
+            // Send close-producer to server
+            wsRef.current?.send(
+                JSON.stringify({
+                    action: 'close-producer',
+                    roomId,
+                    clientId: clientIdRef.current,
+                    data: { producerId: audioProducerRef.current.id },
+                }),
+            );
+
             audioProducerRef.current.close();
             audioProducerRef.current = null;
             setIsTalking(false);

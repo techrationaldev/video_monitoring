@@ -115,6 +115,16 @@ export default function ClientStreamPage() {
                     }
                 });
 
+                client.onTrackEnded((trackId) => {
+                    console.log('[PAGE] Track ended:', trackId);
+                    setRemoteAudioTrack((current) => {
+                        if (current && current.id === trackId) {
+                            return null;
+                        }
+                        return current;
+                    });
+                });
+
                 client.init().then(() => {
                     client.onMessage(async (msg) => {
                         if (msg.action === 'router-rtp-capabilities') {

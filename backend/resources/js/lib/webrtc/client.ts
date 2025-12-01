@@ -17,6 +17,7 @@ export class ClientWebRTC {
     private transportReadyPromise: Promise<void>;
     private transportReadyResolver: (() => void) | null = null;
     private onTrackCallback: ((track: MediaStreamTrack) => void) | null = null;
+    private onTrackEndedCallback: ((trackId: string) => void) | null = null;
 
     constructor(serverUrl: string, roomId: string, clientId: string) {
         this.ws = new WebSocket(serverUrl);
@@ -41,6 +42,10 @@ export class ClientWebRTC {
         this.onTrackCallback = callback;
     }
 
+    onTrackEnded(callback: (trackId: string) => void) {
+        this.onTrackEndedCallback = callback;
+    }
+
     onMessage(callback: (data: any) => void) {
         this.ws.onmessage = (msg) => {
             const data = JSON.parse(msg.data);
@@ -58,6 +63,10 @@ export class ClientWebRTC {
                 this.consume(data.data.producerId);
             }
 
+            if (data.action === 'producer-closed') {
+                this.handleProducerClosed(data.data);
+            }
+
             if (data.action === 'consume-done') {
                 this.handleConsumeDone(data.data);
             }
@@ -71,6 +80,25 @@ export class ClientWebRTC {
 
             callback(data);
         };
+    }
+
+    handleProducerClosed(data: any) {
+        const { producerId } = data;
+        console.log('[CLIENT] Producer closed:', producerId);
+
+        // Find consumer for this producer
+        for (const [consumerId, consumer] of this.consumers) {
+            if (consumer.producerId === producerId) {
+                console.log('[CLIENT] Closing consumer:', consumerId);
+                consumer.close();
+                this.consumers.delete(consumerId);
+
+                if (this.onTrackEndedCallback) {
+                    this.onTrackEndedCallback(consumer.track.id);
+                }
+                break;
+            }
+        }
     }
 
     send(data: any) {

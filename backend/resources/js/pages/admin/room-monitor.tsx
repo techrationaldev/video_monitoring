@@ -170,6 +170,8 @@ export function RoomMonitor({
     const deviceRef = useRef<Device | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const recvTransportRef = useRef<any>(null);
+    const sendTransportRef = useRef<any>(null); // For Admin Talkback
+    const audioProducerRef = useRef<any>(null); // For Admin Talkback
     const consumersRef = useRef<Map<string, any>>(new Map());
     const pendingProducersRef = useRef<
         { producerId: string; clientId: string }[]
@@ -198,6 +200,44 @@ export function RoomMonitor({
         Record<string, boolean>
     >({});
     const [isInterrupted, setIsInterrupted] = useState(false);
+
+    // Device Management
+    const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+    const [selectedAudioDeviceId, setSelectedAudioDeviceId] =
+        useState<string>('');
+
+    useEffect(() => {
+        const getDevices = async () => {
+            try {
+                // Request permission first to get labels
+                // Note: In a real app, you might want to do this only when user interacts
+                // but for admin dashboard it's often acceptable.
+                // However, to avoid annoying popups on load, we might just enumerate
+                // and if labels are empty, we ask for permission when they click "Talk"
+                // But to populate the dropdown, we need permission or at least enumeration.
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(
+                    (d) => d.kind === 'audioinput',
+                );
+                setAudioDevices(audioInputs);
+
+                if (audioInputs.length > 0 && !selectedAudioDeviceId) {
+                    setSelectedAudioDeviceId(audioInputs[0].deviceId);
+                }
+            } catch (e) {
+                console.error('[ADMIN] Failed to enumerate devices:', e);
+            }
+        };
+
+        getDevices();
+        navigator.mediaDevices.addEventListener('devicechange', getDevices);
+        return () =>
+            navigator.mediaDevices.removeEventListener(
+                'devicechange',
+                getDevices,
+            );
+    }, []);
 
     useEffect(() => {
         let ws: WebSocket | null = null;
@@ -242,6 +282,10 @@ export function RoomMonitor({
 
                     case 'create-recv-transport':
                         await createRecvTransport(data);
+                        break;
+
+                    case 'create-send-transport':
+                        await createSendTransport(data);
                         break;
 
                     case 'existing-producers':
@@ -338,6 +382,110 @@ export function RoomMonitor({
             console.log('Device loaded');
         } catch (error) {
             console.error('Failed to load device:', error);
+        }
+    };
+
+    const createSendTransport = async (transportData: any) => {
+        const device = deviceRef.current;
+        if (!device) return;
+
+        const transport = device.createSendTransport(transportData);
+        sendTransportRef.current = transport;
+
+        transport.on('connect', ({ dtlsParameters }, callback, errback) => {
+            wsRef.current?.send(
+                JSON.stringify({
+                    action: 'connect-transport',
+                    roomId,
+                    clientId: clientIdRef.current,
+                    data: {
+                        transportId: transport.id,
+                        dtlsParameters,
+                    },
+                }),
+            );
+            callback();
+        });
+
+        transport.on(
+            'produce',
+            ({ kind, rtpParameters }, callback, errback) => {
+                wsRef.current?.send(
+                    JSON.stringify({
+                        action: 'produce',
+                        roomId,
+                        clientId: clientIdRef.current,
+                        data: {
+                            transportId: transport.id,
+                            kind,
+                            rtpParameters,
+                        },
+                    }),
+                );
+
+                // Wait for produce-done
+                const handleProduceDone = (event: MessageEvent) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.action === 'produce-done') {
+                        callback({ id: msg.producerId });
+                        wsRef.current?.removeEventListener(
+                            'message',
+                            handleProduceDone,
+                        );
+                    }
+                };
+                wsRef.current?.addEventListener('message', handleProduceDone);
+            },
+        );
+    };
+
+    const [isTalking, setIsTalking] = useState(false);
+
+    const startTalking = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: selectedAudioDeviceId
+                    ? { deviceId: { exact: selectedAudioDeviceId } }
+                    : true,
+            });
+            const track = stream.getAudioTracks()[0];
+
+            if (!sendTransportRef.current) {
+                // Request send transport
+                wsRef.current?.send(
+                    JSON.stringify({
+                        action: 'create-send-transport',
+                        roomId,
+                        clientId: clientIdRef.current,
+                    }),
+                );
+
+                // Wait for transport to be created (this is a bit hacky, better to use a promise/event)
+                // For now, we rely on the WS handler calling createSendTransport
+                // We'll retry producing in a bit
+                setTimeout(async () => {
+                    if (sendTransportRef.current) {
+                        audioProducerRef.current =
+                            await sendTransportRef.current.produce({ track });
+                        setIsTalking(true);
+                    }
+                }, 1000);
+            } else {
+                audioProducerRef.current =
+                    await sendTransportRef.current.produce({ track });
+                setIsTalking(true);
+            }
+        } catch (err) {
+            console.error('Failed to start talking:', err);
+            alert('Could not access microphone');
+        }
+    };
+
+    const stopTalking = () => {
+        if (audioProducerRef.current) {
+            audioProducerRef.current.close();
+            audioProducerRef.current = null;
+            setIsTalking(false);
         }
     };
 
@@ -661,21 +809,59 @@ export function RoomMonitor({
                         {roomId}
                     </span>
                 </h2>
-                <span
-                    className={`rounded-full px-3 py-1 text-sm font-medium ${
-                        connectionStatus === 'connected'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={selectedAudioDeviceId}
+                            onChange={(e) =>
+                                setSelectedAudioDeviceId(e.target.value)
+                            }
+                            className="rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                        >
+                            {audioDevices.map((device) => (
+                                <option
+                                    key={device.deviceId}
+                                    value={device.deviceId}
+                                >
+                                    {device.label ||
+                                        `Mic ${device.deviceId.slice(0, 5)}...`}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onMouseDown={startTalking}
+                        onMouseUp={stopTalking}
+                        onMouseLeave={stopTalking}
+                        className={`flex items-center gap-2 rounded-full px-4 py-2 font-bold text-white transition-all ${
+                            isTalking
+                                ? 'scale-105 bg-red-600 shadow-lg'
+                                : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                    >
+                        {isTalking ? (
+                            <Mic className="animate-pulse" />
+                        ) : (
+                            <MicOff />
+                        )}
+                        {isTalking ? 'Broadcasting...' : 'Hold to Talk'}
+                    </button>
+                    <span
+                        className={`rounded-full px-3 py-1 text-sm font-medium ${
+                            connectionStatus === 'connected'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : connectionStatus === 'reconnecting'
+                                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }`}
+                    >
+                        {connectionStatus === 'connected'
+                            ? 'Active'
                             : connectionStatus === 'reconnecting'
-                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                    }`}
-                >
-                    {connectionStatus === 'connected'
-                        ? 'Active'
-                        : connectionStatus === 'reconnecting'
-                          ? 'Reconnecting...'
-                          : 'Disconnected'}
-                </span>
+                              ? 'Reconnecting...'
+                              : 'Disconnected'}
+                    </span>
+                </div>
             </div>
             <div
                 className={`grid h-full w-full gap-6 ${

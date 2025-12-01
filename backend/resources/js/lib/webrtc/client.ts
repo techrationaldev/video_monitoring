@@ -5,7 +5,9 @@ export class ClientWebRTC {
     private ws: WebSocket;
     private device: Device | null = null;
     private sendTransport: any;
+    private recvTransport: any;
     private producers = new Map<string, any>();
+    private consumers = new Map<string, any>();
     private audioProducer: any = null;
     private videoProducer: any = null;
     private roomId: string;
@@ -14,6 +16,7 @@ export class ClientWebRTC {
     private deviceLoadedResolver: (() => void) | null = null;
     private transportReadyPromise: Promise<void>;
     private transportReadyResolver: (() => void) | null = null;
+    private onTrackCallback: ((track: MediaStreamTrack) => void) | null = null;
 
     constructor(serverUrl: string, roomId: string, clientId: string) {
         this.ws = new WebSocket(serverUrl);
@@ -34,6 +37,10 @@ export class ClientWebRTC {
         );
     }
 
+    onTrack(callback: (track: MediaStreamTrack) => void) {
+        this.onTrackCallback = callback;
+    }
+
     onMessage(callback: (data: any) => void) {
         this.ws.onmessage = (msg) => {
             const data = JSON.parse(msg.data);
@@ -41,6 +48,18 @@ export class ClientWebRTC {
 
             if (data.action === 'restart-ice-done') {
                 this.handleRestartIceDone(data.data);
+            }
+
+            if (data.action === 'create-recv-transport') {
+                this.createRecvTransport(data.data);
+            }
+
+            if (data.action === 'new-producer') {
+                this.consume(data.data.producerId);
+            }
+
+            if (data.action === 'consume-done') {
+                this.handleConsumeDone(data.data);
             }
 
             if (data.action === 'session-ended') {
@@ -72,6 +91,10 @@ export class ClientWebRTC {
         this.ws.onopen = () => {
             console.log('[CLIENT] WS CONNECTED');
             this.send({ action: 'join-as-streamer', roomId: this.roomId });
+
+            // Request to create recv transport as well
+            this.send({ action: 'create-recv-transport', roomId: this.roomId });
+
             if (resolve) resolve();
         };
 
@@ -237,6 +260,12 @@ export class ClientWebRTC {
         }
     }
 
+    async replaceAudioTrack(track: MediaStreamTrack) {
+        if (this.audioProducer) {
+            await this.audioProducer.replaceTrack({ track });
+        }
+    }
+
     muteAudio() {
         if (this.audioProducer) {
             this.audioProducer.pause(); // Mediasoup "pause" on producer stops sending RTP
@@ -297,5 +326,125 @@ export class ClientWebRTC {
             default:
                 console.warn(`[CLIENT] Unknown admin action: ${actionType}`);
         }
+    }
+
+    async createRecvTransport(options: TransportOptions) {
+        console.log('[CLIENT] createRecvTransport options received:', options);
+
+        await this.deviceLoadedPromise;
+
+        if (!this.device) {
+            console.error('[CLIENT] Device is null after waiting!');
+            return;
+        }
+
+        this.recvTransport = this.device.createRecvTransport(options);
+
+        this.recvTransport.on(
+            'connect',
+            ({ dtlsParameters }: any, callback: any) => {
+                console.log('[CLIENT] Recv Transport connect');
+                this.send({
+                    action: 'connect-transport',
+                    roomId: this.roomId,
+                    data: {
+                        transportId: this.recvTransport.id,
+                        dtlsParameters,
+                    },
+                });
+                callback();
+            },
+        );
+
+        this.recvTransport.on(
+            'connectionstatechange',
+            async (state: string) => {
+                console.log(
+                    `[CLIENT] Recv Transport connection state changed: ${state}`,
+                );
+            },
+        );
+    }
+
+    async consume(producerId: string) {
+        console.log('[CLIENT] Attempting to consume producer:', producerId);
+        await this.deviceLoadedPromise;
+
+        if (!this.device || !this.recvTransport) {
+            console.warn('[CLIENT] Device or RecvTransport not ready');
+            return;
+        }
+
+        const rtpCapabilities = this.device.rtpCapabilities;
+
+        this.send({
+            action: 'consume',
+            roomId: this.roomId,
+            data: {
+                transportId: this.recvTransport.id,
+                producerId,
+                rtpCapabilities,
+            },
+        });
+    }
+
+    async handleConsumeDone(data: any) {
+        const { id, producerId, kind, rtpParameters } = data;
+        console.log('[CLIENT] handleConsumeDone:', id, kind);
+
+        if (!this.recvTransport) return;
+
+        const consumer = await this.recvTransport.consume({
+            id,
+            producerId,
+            kind,
+            rtpParameters,
+        });
+
+        this.consumers.set(consumer.id, consumer);
+
+        if (this.onTrackCallback) {
+            this.onTrackCallback(consumer.track);
+        }
+
+        // Resume consumer
+        this.send({
+            action: 'resume-consumer',
+            roomId: this.roomId,
+            data: { consumerId: consumer.id },
+        });
+    }
+    close() {
+        console.log('[CLIENT] Closing client...');
+
+        // Stop producers
+        this.producers.forEach((producer) => {
+            producer.close();
+        });
+        this.producers.clear();
+
+        // Stop consumers
+        this.consumers.forEach((consumer) => {
+            consumer.close();
+        });
+        this.consumers.clear();
+
+        // Close transports
+        if (this.sendTransport) {
+            this.sendTransport.close();
+            this.sendTransport = null;
+        }
+
+        if (this.recvTransport) {
+            this.recvTransport.close();
+            this.recvTransport = null;
+        }
+
+        // Close WebSocket
+        if (this.ws) {
+            this.ws.close();
+        }
+
+        console.log('[CLIENT] Client closed');
     }
 }

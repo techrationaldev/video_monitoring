@@ -343,6 +343,32 @@ wss.on("connection", (ws: WebSocket, req) => {
         );
       }
 
+      if (action === "create-send-transport") {
+        if (!clientId) {
+          console.error("Missing clientId for create-send-transport");
+          return;
+        }
+        const transport = await room.createSendTransport(clientId);
+        ws.send(
+          JSON.stringify({
+            action: "create-send-transport",
+            data: {
+              id: transport.id,
+              iceParameters: transport.iceParameters,
+              iceCandidates: transport.iceCandidates,
+              dtlsParameters: transport.dtlsParameters,
+              iceServers: [
+                {
+                  urls: [`turn:${config.turnHostname}:3478`],
+                  username: config.turnUsername,
+                  credential: config.turnPassword,
+                },
+              ],
+            },
+          })
+        );
+      }
+
       if (action === "consume") {
         if (!data.transportId || !data.producerId || !data.rtpCapabilities) {
           console.error(

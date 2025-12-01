@@ -1,7 +1,8 @@
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
+import { ExternalLink } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -99,7 +100,16 @@ export default function Dashboard({
                                 className="rounded-lg border bg-white p-4 shadow-sm dark:bg-sidebar"
                             >
                                 <h3 className="mb-2 flex items-center justify-between font-semibold">
-                                    <span>{room.name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span>{room.name}</span>
+                                        <Link
+                                            href={`/rooms/${room.name}/monitor`}
+                                            className="text-gray-500 hover:text-blue-600"
+                                            title="Open Full Monitor"
+                                        >
+                                            <ExternalLink size={16} />
+                                        </Link>
+                                    </div>
                                     {room.viewerCount !== undefined && (
                                         <span className="text-xs text-gray-500">
                                             {room.viewerCount} viewers

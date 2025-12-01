@@ -1,3 +1,4 @@
+import { AudioLevelIndicator } from '@/components/AudioLevelIndicator';
 import StreamSetup from '@/components/StreamSetup';
 import { ClientWebRTC } from '@/lib/webrtc/client';
 import axios from 'axios';
@@ -210,6 +211,16 @@ export default function ClientStreamPage() {
                                 </svg>
                             )}
                         </button>
+                        {mediaStream?.getAudioTracks()[0] && (
+                            <div className="flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 backdrop-blur-sm">
+                                <span className="text-xs text-white">
+                                    Mic Level:
+                                </span>
+                                <AudioLevelIndicator
+                                    track={mediaStream.getAudioTracks()[0]}
+                                />
+                            </div>
+                        )}
                         <button
                             onClick={toggleVideo}
                             className={`rounded-full p-3 ${videoEnabled ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white hover:bg-red-600'} backdrop-blur-sm transition-colors`}

@@ -1,3 +1,4 @@
+import { AudioLevelIndicator } from '@/components/AudioLevelIndicator';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { Mic, MicOff, RefreshCw, Video, VideoOff } from 'lucide-react';
@@ -63,10 +64,70 @@ function AudioPlayer({
     const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
+        console.log('[AudioPlayer] Muted state changed:', muted);
+        if (!muted && audioRef.current?.paused) {
+            console.log(
+                '[AudioPlayer] Unmuted and paused, attempting to play...',
+            );
+            audioRef.current
+                .play()
+                .catch((e) =>
+                    console.error('[AudioPlayer] Play on unmute failed:', e),
+                );
+        }
+    }, [muted]);
+
+    useEffect(() => {
         if (audioRef.current && track) {
+            console.log(
+                '[AudioPlayer] Playing track:',
+                track.id,
+                track.enabled,
+                track.readyState,
+            );
             const stream = new MediaStream([track]);
             audioRef.current.srcObject = stream;
-            audioRef.current.play().catch(console.error);
+
+            const playAudio = () => {
+                audioRef.current
+                    ?.play()
+                    .then(() =>
+                        console.log(
+                            '[AudioPlayer] Playback started successfully',
+                        ),
+                    )
+                    .catch((e) => {
+                        console.error(
+                            '[AudioPlayer] Play failed (likely autoplay policy):',
+                            e,
+                        );
+                        // Add one-time listener for interaction
+                        const retryPlay = () => {
+                            console.log(
+                                '[AudioPlayer] Retrying playback after interaction...',
+                            );
+                            audioRef.current
+                                ?.play()
+                                .then(() =>
+                                    console.log(
+                                        '[AudioPlayer] Retry playback successful',
+                                    ),
+                                )
+                                .catch((e) =>
+                                    console.error(
+                                        '[AudioPlayer] Retry playback failed:',
+                                        e,
+                                    ),
+                                );
+                            window.removeEventListener('click', retryPlay);
+                            window.removeEventListener('keydown', retryPlay);
+                        };
+                        window.addEventListener('click', retryPlay);
+                        window.addEventListener('keydown', retryPlay);
+                    });
+            };
+
+            playAudio();
         }
     }, [track]);
 
@@ -616,7 +677,13 @@ export function RoomMonitor({
                           : 'Disconnected'}
                 </span>
             </div>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div
+                className={`grid h-full w-full gap-6 ${
+                    Object.keys(clientStreams).length === 1
+                        ? 'grid-cols-1'
+                        : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                }`}
+            >
                 {Object.keys(clientStreams).length === 0 && (
                     <div className="col-span-full flex h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
                         <div className="mb-4 h-12 w-12 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
@@ -637,15 +704,27 @@ export function RoomMonitor({
                                 ? 'ring-2 shadow-blue-500/20 ring-blue-500'
                                 : 'ring-gray-200 dark:ring-gray-700'
                         } dark:bg-gray-800`}
-                        onClick={() =>
+                        onClick={() => {
+                            console.log(
+                                '[RoomMonitor] Card clicked. Current active:',
+                                activeAudioClientId,
+                                'Clicked:',
+                                client.clientId,
+                            );
                             setActiveAudioClientId(
                                 client.clientId === activeAudioClientId
                                     ? null
                                     : client.clientId,
-                            )
-                        }
+                            );
+                        }}
                     >
-                        <div className="group relative aspect-video cursor-pointer bg-black">
+                        <div
+                            className={`group relative cursor-pointer bg-black ${
+                                Object.keys(clientStreams).length === 1
+                                    ? 'h-[calc(100vh-12rem)] w-full'
+                                    : 'aspect-video'
+                            }`}
+                        >
                             {client.video ? (
                                 <VideoPlayer
                                     track={client.video.track}
@@ -686,6 +765,13 @@ export function RoomMonitor({
                                 <span className="rounded bg-black/60 px-2 py-1 font-mono text-xs text-white backdrop-blur-sm">
                                     ID: {client.clientId.slice(0, 8)}
                                 </span>
+                                {client.audio && (
+                                    <div className="rounded bg-black/60 px-2 py-1 backdrop-blur-sm">
+                                        <AudioLevelIndicator
+                                            track={client.audio.track}
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Audio Indicator */}
@@ -758,9 +844,14 @@ export function RoomMonitor({
                                         </span>
                                     )}
                                     {client.audio && (
-                                        <span className="text-blue-500">
-                                            Audio
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <AudioLevelIndicator
+                                                track={client.audio.track}
+                                            />
+                                            <span className="text-blue-500">
+                                                Audio
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
                             </div>

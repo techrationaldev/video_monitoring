@@ -263,7 +263,10 @@ wss.on("connection", (ws: WebSocket, req) => {
           room.addViewer(clientId); // Track viewer only if new
         }
 
-        console.log(`[SERVER] Viewer joined room ${roomId}`);
+        console.log(
+          `[SERVER] Viewer joined room ${roomId} | Client: ${clientId}`
+        );
+        console.log(`[SERVER] Current viewers: ${Array.from(room.viewers)}`);
 
         // Broadcast viewer count to all clients in the room (including producer)
         const viewerCount = room.getViewerCount();
@@ -296,6 +299,9 @@ wss.on("connection", (ws: WebSocket, req) => {
         ws.on("close", () => {
           if (clientId) {
             room.removeViewer(clientId);
+            console.log(
+              `[SERVER] Viewer left room (socket close): ${clientId}`
+            );
             const newCount = room.getViewerCount();
             for (const [_, clientWs] of room.clients) {
               if (clientWs.readyState === WebSocket.OPEN) {

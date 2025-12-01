@@ -12,6 +12,8 @@ export class ClientWebRTC {
     private clientId: string;
     private deviceLoadedPromise: Promise<void>;
     private deviceLoadedResolver: (() => void) | null = null;
+    private transportReadyPromise: Promise<void>;
+    private transportReadyResolver: (() => void) | null = null;
 
     constructor(serverUrl: string, roomId: string, clientId: string) {
         this.ws = new WebSocket(serverUrl);
@@ -19,6 +21,9 @@ export class ClientWebRTC {
         this.clientId = clientId;
         this.deviceLoadedPromise = new Promise((resolve) => {
             this.deviceLoadedResolver = resolve;
+        });
+        this.transportReadyPromise = new Promise((resolve) => {
+            this.transportReadyResolver = resolve;
         });
 
         console.log(
@@ -120,6 +125,9 @@ export class ClientWebRTC {
         }
 
         this.sendTransport = this.device.createSendTransport(options);
+        if (this.transportReadyResolver) {
+            this.transportReadyResolver();
+        }
 
         this.sendTransport.on(
             'connect',
@@ -195,6 +203,8 @@ export class ClientWebRTC {
     }
 
     async produceStream(stream: MediaStream) {
+        await this.transportReadyPromise;
+
         if (!this.sendTransport) {
             console.error('[CLIENT] sendTransport is not ready!');
             return;

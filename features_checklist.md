@@ -10,7 +10,7 @@
 
 ## Stream Management
 
-- [ ] **Recording**: Record live streams to MP4 for later playback.
+- [ ] **Recording**: Record live streams to MP4 using a separate service (not stored in main database).
 - [ ] **Snapshots**: Capture high-res images from the live stream.
 - [ ] **Kick/Ban**: Admin ability to force-disconnect a streamer or viewer.
 - [ ] **Remote Mute**: Admin ability to mute a streamer's audio.

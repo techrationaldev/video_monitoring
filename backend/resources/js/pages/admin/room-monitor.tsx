@@ -165,6 +165,10 @@ export function RoomMonitor({
 
             if (track.kind === 'audio') acc[track.clientId].audio = track;
             if (track.appData) {
+                console.log(
+                    `[ADMIN] Track ${track.id} has appData:`,
+                    track.appData,
+                );
                 acc[track.clientId].metadata = {
                     ...acc[track.clientId].metadata,
                     ...track.appData,
@@ -638,6 +642,11 @@ export function RoomMonitor({
         }
 
         // Send to server
+        console.log(`[ADMIN] Sending set-consumer-preferred-layers:`, {
+            consumerId: videoTrack.id,
+            spatialLayer,
+            temporalLayer,
+        });
         wsRef.current?.send(
             JSON.stringify({
                 action: 'set-consumer-preferred-layers',

@@ -274,7 +274,7 @@ export class ClientWebRTC {
                     { maxBitrate: 900000, scaleResolutionDownBy: 1 }, // High (720p)
                 ],
                 codecOptions: {
-                    videoGoogleStartBitrate: 1000,
+                    videoGoogleStartBitrate: 1000000,
                 },
                 appData: { ...metadata, source: 'webcam' },
             });

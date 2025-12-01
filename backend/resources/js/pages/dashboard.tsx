@@ -168,6 +168,7 @@ export default function Dashboard({
                                     <RoomMonitor
                                         roomId={room.name}
                                         variant="card"
+                                        initialPreferredLayer="low"
                                     />
 
                                     {/* Hover Overlay for "Watch Live" - Optional but good for UX */}

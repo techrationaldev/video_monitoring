@@ -148,7 +148,11 @@ export default function RoomMonitorPage({ roomId }: Props) {
 export function RoomMonitor({
     roomId,
     variant = 'full',
-}: Props & { variant?: 'full' | 'card' }) {
+    initialPreferredLayer = 'auto',
+}: Props & {
+    variant?: 'full' | 'card';
+    initialPreferredLayer?: 'auto' | 'high' | 'medium' | 'low';
+}) {
     const [tracks, setTracks] = useState<MediaTrack[]>([]);
 
     // Group tracks
@@ -218,6 +222,9 @@ export function RoomMonitor({
     const [networkQuality, setNetworkQuality] = useState<
         'Excellent' | 'Good' | 'Poor'
     >('Excellent');
+    const [preferredLayer, setPreferredLayer] = useState<
+        'auto' | 'high' | 'medium' | 'low'
+    >(initialPreferredLayer);
     const [recordings, setRecordings] = useState(MOCK_CLIPS);
 
     const lastStatsRef = useRef<
@@ -613,6 +620,38 @@ export function RoomMonitor({
         }
     };
 
+    const changeResolution = (layer: 'auto' | 'high' | 'medium' | 'low') => {
+        setPreferredLayer(layer);
+
+        // Find video consumer
+        const videoTrack = Object.values(clientStreams)[0]?.video;
+        if (!videoTrack) return;
+
+        // Map layer to spatial/temporal
+        let spatialLayer = 2; // High
+        let temporalLayer = 2; // High
+
+        if (layer === 'medium') {
+            spatialLayer = 1;
+        } else if (layer === 'low') {
+            spatialLayer = 0;
+        }
+
+        // Send to server
+        wsRef.current?.send(
+            JSON.stringify({
+                action: 'set-consumer-preferred-layers',
+                roomId,
+                clientId: clientIdRef.current,
+                data: {
+                    consumerId: videoTrack.id,
+                    spatialLayer,
+                    temporalLayer,
+                },
+            }),
+        );
+    };
+
     // --- Render ---
 
     if (variant === 'card') {
@@ -872,6 +911,22 @@ export function RoomMonitor({
                                     <button className="rounded-lg bg-black/50 p-2.5 text-white backdrop-blur-md hover:bg-black/70">
                                         <Maximize2 className="h-5 w-5" />
                                     </button>
+
+                                    {/* Resolution Selector */}
+                                    <select
+                                        value={preferredLayer}
+                                        onChange={(e) =>
+                                            changeResolution(
+                                                e.target.value as any,
+                                            )
+                                        }
+                                        className="cursor-pointer rounded-lg border-none bg-black/50 p-2.5 text-xs text-white backdrop-blur-md outline-none hover:bg-black/70"
+                                    >
+                                        <option value="auto">Auto</option>
+                                        <option value="high">720p</option>
+                                        <option value="medium">480p</option>
+                                        <option value="low">240p</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>

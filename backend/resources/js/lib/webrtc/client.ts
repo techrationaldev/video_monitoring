@@ -268,6 +268,14 @@ export class ClientWebRTC {
             console.log('[CLIENT] Producing video track...');
             this.videoProducer = await this.sendTransport.produce({
                 track: videoTrack,
+                encodings: [
+                    { maxBitrate: 100000, scaleResolutionDownBy: 4 }, // Low (240p)
+                    { maxBitrate: 300000, scaleResolutionDownBy: 2 }, // Medium (480p)
+                    { maxBitrate: 900000, scaleResolutionDownBy: 1 }, // High (720p)
+                ],
+                codecOptions: {
+                    videoGoogleStartBitrate: 1000,
+                },
                 appData: { ...metadata, source: 'webcam' },
             });
             this.producers.set('video', this.videoProducer);

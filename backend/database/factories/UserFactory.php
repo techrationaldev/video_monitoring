@@ -7,19 +7,25 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
+ * Class UserFactory
+ *
+ * Factory for creating User model instances.
+ *
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
  */
 class UserFactory extends Factory
 {
     /**
      * The current password being used by the factory.
+     *
+     * @var string|null
      */
     protected static ?string $password;
 
     /**
      * Define the model's default state.
      *
-     * @return array<string, mixed>
+     * @return array<string, mixed> The default attributes for the user.
      */
     public function definition(): array
     {
@@ -37,6 +43,8 @@ class UserFactory extends Factory
 
     /**
      * Indicate that the model's email address should be unverified.
+     *
+     * @return static The factory instance.
      */
     public function unverified(): static
     {
@@ -47,6 +55,8 @@ class UserFactory extends Factory
 
     /**
      * Indicate that the model does not have two-factor authentication configured.
+     *
+     * @return static The factory instance.
      */
     public function withoutTwoFactor(): static
     {

@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * Pest Configuration
+ *
+ * Configures the Pest testing framework, including base test cases, expectations, and global helper functions.
+ */
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -41,6 +47,11 @@ expect()->extend('toBeOne', function () {
 |
 */
 
+/**
+ * Example helper function.
+ *
+ * @return void
+ */
 function something()
 {
     // ..

@@ -3,13 +3,27 @@
 namespace App\Http\Controllers;
 
 use App\Models\Recording;
+use App\Models\Room;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 
+/**
+ * Class RecordingController
+ *
+ * Handles recording operations.
+ *
+ * @package App\Http\Controllers
+ */
 class RecordingController extends Controller
 {
-    //
-    // POST /recordings/start
-    public function start(Request $request)
+    /**
+     * Starts a new recording session.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'room_session_id' and 'room_id'.
+     * @return \Illuminate\Http\JsonResponse JSON response with the created recording.
+     */
+    public function start(Request $request): JsonResponse
     {
         $data = $request->validate([
             'room_session_id' => 'required',
@@ -18,7 +32,7 @@ class RecordingController extends Controller
 
         $rec = Recording::create([
             'room_session_id' => $data['room_session_id'],
-            'user_id' => \Illuminate\Support\Facades\Auth::id(),
+            'user_id' => Auth::id(),
             'room_id' => $data['room_id'],
             'file_path' => '',
             'started_at' => now(),
@@ -27,16 +41,27 @@ class RecordingController extends Controller
         return response()->json($rec);
     }
 
-    // POST /recordings/{id}/stop
-    public function stop($id)
+    /**
+     * Stops a recording session.
+     *
+     * @param int $id The ID of the recording to stop.
+     * @return \Illuminate\Http\JsonResponse JSON response with the updated recording.
+     */
+    public function stop($id): JsonResponse
     {
         $rec = Recording::findOrFail($id);
         $rec->update(['ended_at' => now()]);
 
         return response()->json($rec);
     }
-    // Internal: Called by Mediasoup when recording actually starts
-    public function internalStart(Request $request)
+
+    /**
+     * Internal endpoint called by Mediasoup when recording actually starts.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'roomId' and 'filename'.
+     * @return \Illuminate\Http\JsonResponse JSON response with the recording ID.
+     */
+    public function internalStart(Request $request): JsonResponse
     {
         $data = $request->validate([
             'roomId' => 'required',
@@ -47,7 +72,7 @@ class RecordingController extends Controller
         // For simplicity, we'll just link to the Room and the current User (if we can identify them, but here it's system)
         // Actually, we should probably pass the 'roomSessionId' if we have it, or just the Room.
 
-        $room = \App\Models\Room::where('name', $data['roomId'])->firstOrFail();
+        $room = Room::where('name', $data['roomId'])->firstOrFail();
 
         $rec = Recording::create([
             'room_id' => $room->id,
@@ -59,8 +84,13 @@ class RecordingController extends Controller
         return response()->json(['id' => $rec->id]);
     }
 
-    // Internal: Called by Mediasoup when recording stops
-    public function internalStop(Request $request)
+    /**
+     * Internal endpoint called by Mediasoup when recording stops.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'roomId' and 'filename'.
+     * @return \Illuminate\Http\JsonResponse JSON response indicating status.
+     */
+    public function internalStop(Request $request): JsonResponse
     {
         $data = $request->validate([
             'roomId' => 'required',

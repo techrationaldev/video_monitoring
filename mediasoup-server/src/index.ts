@@ -9,6 +9,12 @@ import { config } from "./config.js";
 let worker: types.Worker;
 let router: types.Router;
 
+/**
+ * Initializes the Mediasoup worker and router.
+ * Sets up media codecs and handles worker death.
+ *
+ * @returns {Promise<void>}
+ */
 async function setupMediasoup() {
   try {
     worker = await mediasoup.createWorker({
@@ -71,24 +77,45 @@ try {
 const wss = new WebSocketServer({ port: config.serverPort });
 console.log(`[SERVER] WS running on port ${config.serverPort}`);
 
+/**
+ * Interface representing a message received via WebSocket.
+ */
 interface WebSocketMessage {
+  /** The action type of the message. */
   action: string;
+  /** The ID of the room related to the message. */
   roomId: string;
+  /** The ID of the client sending the message. */
   clientId?: string;
-  token?: string; // Auth token
+  /** Authentication token (optional). */
+  token?: string;
+  /** Transport ID (optional). */
   transportId?: string;
+  /** Producer ID (optional). */
   producerId?: string;
+  /** DTLS parameters for transport connection. */
   dtlsParameters?: types.DtlsParameters;
+  /** Media kind (audio/video). */
   kind?: types.MediaKind;
+  /** RTP parameters. */
   rtpParameters?: types.RtpParameters;
+  /** RTP capabilities. */
   rtpCapabilities?: types.RtpCapabilities;
+  /** Additional application data. */
   appData?: any;
+  /** Generic data payload. */
   data?: any;
 }
 
 const pendingRemovals = new Map<string, NodeJS.Timeout>();
 const adminClients = new Set<WebSocket>();
 
+/**
+ * Broadcasts the list of active rooms to all connected admin clients.
+ * Filters rooms to include only those with at least one producer.
+ *
+ * @returns {void}
+ */
 function broadcastActiveRooms() {
   const activeRooms = [];
   for (const room of rooms.rooms.values()) {

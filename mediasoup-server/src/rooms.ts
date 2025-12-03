@@ -69,7 +69,8 @@ export class Room {
   async produce(
     clientId: string,
     kind: types.MediaKind,
-    rtp: types.RtpParameters
+    rtp: types.RtpParameters,
+    appData: any = {}
   ) {
     // Fallback: use the first available transport (for backward compatibility)
     const transport = [...this.transports.values()][0];
@@ -79,7 +80,7 @@ export class Room {
     const producer = await transport.produce({
       kind,
       rtpParameters: rtp,
-      appData: { clientId },
+      appData: { ...appData, clientId },
     });
 
     this.producers.set(producer.id, producer);
@@ -105,7 +106,7 @@ export class Room {
     const producer = await transport.produce({
       kind,
       rtpParameters: rtp,
-      appData: { clientId },
+      appData: { ...appData, clientId },
     });
 
     this.producers.set(producer.id, producer);
@@ -200,6 +201,7 @@ export class Room {
       id: p.id,
       kind: p.kind,
       clientId: p.appData.clientId,
+      appData: p.appData,
     }));
   }
   closeProducer(producerId: string) {

@@ -51,7 +51,7 @@ export class Room {
         const iceParameters = await transport.restartIce();
         return iceParameters;
     }
-    async produce(clientId, kind, rtp) {
+    async produce(clientId, kind, rtp, appData = {}) {
         // Fallback: use the first available transport (for backward compatibility)
         const transport = [...this.transports.values()][0];
         if (!transport) {
@@ -60,7 +60,7 @@ export class Room {
         const producer = await transport.produce({
             kind,
             rtpParameters: rtp,
-            appData: { clientId },
+            appData: { ...appData, clientId },
         });
         this.producers.set(producer.id, producer);
         producer.on("transportclose", () => {
@@ -76,7 +76,7 @@ export class Room {
         const producer = await transport.produce({
             kind,
             rtpParameters: rtp,
-            appData: { clientId },
+            appData: { ...appData, clientId },
         });
         this.producers.set(producer.id, producer);
         producer.on("transportclose", () => {
@@ -144,6 +144,7 @@ export class Room {
             id: p.id,
             kind: p.kind,
             clientId: p.appData.clientId,
+            appData: p.appData,
         }));
     }
     closeProducer(producerId) {

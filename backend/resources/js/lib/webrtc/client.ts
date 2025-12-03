@@ -265,7 +265,21 @@ export class ClientWebRTC {
         // Produce Video
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
-            console.log('[CLIENT] Producing video track...');
+            const settings = videoTrack.getSettings();
+            console.log(
+                `[CLIENT] Producing video track. Input Resolution: ${settings.width}x${settings.height}`,
+            );
+            console.log(
+                `[CLIENT] Track State: ${videoTrack.readyState}, Enabled: ${videoTrack.enabled}, Stream Active: ${stream.active}`,
+            );
+
+            if (videoTrack.readyState === 'ended') {
+                console.error(
+                    '[CLIENT] Video track is already ended! Cannot produce.',
+                );
+                return;
+            }
+
             this.videoProducer = await this.sendTransport.produce({
                 track: videoTrack,
                 encodings: [

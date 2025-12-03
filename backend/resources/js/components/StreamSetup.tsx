@@ -18,6 +18,8 @@ export default function StreamSetup({ onReady }: StreamSetupProps) {
     const [stream, setStream] = useState<MediaStream | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
 
+    const keepStreamAlive = useRef(false);
+
     useEffect(() => {
         getDevices();
     }, []);
@@ -25,7 +27,7 @@ export default function StreamSetup({ onReady }: StreamSetupProps) {
     useEffect(() => {
         startPreview();
         return () => {
-            if (stream) {
+            if (stream && !keepStreamAlive.current) {
                 stream.getTracks().forEach((track) => track.stop());
             }
         };
@@ -63,9 +65,24 @@ export default function StreamSetup({ onReady }: StreamSetupProps) {
     };
 
     const startPreview = async () => {
-        if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
-        }
+        // Stop previous stream if it exists and we are NOT keeping it alive (though here we are switching devices so we should stop old one)
+        // Actually, startPreview is called when devices change. We always want to stop the OLD stream.
+        // But the cleanup function handles that.
+        // Wait, if we switch devices, we want to stop the old stream.
+        // If we unmount to start, we want to KEEP the current stream.
+
+        // The cleanup runs on dependency change AND unmount.
+        // If dependency changes, we want to stop.
+        // If unmount (and starting), we want to keep.
+
+        // So keepStreamAlive works for unmount.
+        // But for dependency change? keepStreamAlive is false. So it stops. Correct.
+
+        // However, startPreview ALSO stops tracks?
+        // Line 66: if (stream) stream.getTracks().forEach(t => t.stop());
+        // This is redundant if cleanup does it, but safe.
+
+        // Let's look at startPreview again.
 
         try {
             const newStream = await navigator.mediaDevices.getUserMedia({
@@ -88,6 +105,7 @@ export default function StreamSetup({ onReady }: StreamSetupProps) {
 
     const handleStart = () => {
         if (stream) {
+            keepStreamAlive.current = true;
             onReady(stream, videoEnabled, audioEnabled);
         }
     };

@@ -1,0 +1,35 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+coverage/
+
+# Environment variables
+.env
+
+# MacOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Laravel
+vendor/
+backend/vendor/
+backend/storage/
+backend/node_modules/
+backend/public/build
+backend/public/hot
+backend/public/storage
+backend/.phpunit.result.cache
+
+# Mediasoup Server
+mediasoup-server/node_modules/
+mediasoup-server/dist/
+
+# Recording Service
+recording-service/node_modules/
+recording-service/dist/
+recording-service/recordings/

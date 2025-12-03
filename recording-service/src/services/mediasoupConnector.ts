@@ -15,12 +15,15 @@ export class MediasoupConnector {
 
   // Request the Mediasoup server to create a PlainTransport for recording
   // and return the necessary connection details (IP, Port, SDP, etc.)
-  async startRecordingTransport(roomId: string): Promise<{ rtpPort: number, remoteIp: string, sdp: string }> {
+  async startRecordingTransport(roomId: string, recordingIp: string, audioPort: number, videoPort: number): Promise<{ transportId: string, sdp: string }> {
     try {
       logger.info(`Requesting recording transport from Mediasoup for room ${roomId}`);
 
       const response = await axios.post(`${this.mediasoupUrl}/create-recording-transport`, {
-        roomId
+        roomId,
+        recordingIp,
+        audioPort,
+        videoPort
       }, {
         headers: {
           'Authorization': `Bearer ${this.apiSecret}`,

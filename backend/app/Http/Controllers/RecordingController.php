@@ -7,6 +7,8 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Class RecordingController
@@ -18,93 +20,127 @@ use Illuminate\Support\Facades\Auth;
 class RecordingController extends Controller
 {
     /**
-     * Starts a new recording session.
+     * List recordings.
      *
-     * @param \Illuminate\Http\Request $request The request object containing 'room_session_id' and 'room_id'.
-     * @return \Illuminate\Http\JsonResponse JSON response with the created recording.
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = Recording::query()->with('room');
+
+        if ($request->has('room_id')) {
+            $query->where('room_id', $request->room_id);
+        }
+
+        if ($request->has('room_name')) {
+            $query->whereHas('room', function($q) use ($request) {
+                $q->where('name', $request->room_name);
+            });
+        }
+
+        return response()->json($query->latest()->get());
+    }
+
+    /**
+     * Starts a new recording session (Manual).
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'roomId'.
+     * @return \Illuminate\Http\JsonResponse JSON response.
      */
     public function start(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'room_session_id' => 'required',
-            'room_id' => 'required',
+            'roomId' => 'required', // Room Name
         ]);
 
-        $rec = Recording::create([
-            'room_session_id' => $data['room_session_id'],
-            'user_id' => Auth::id(),
-            'room_id' => $data['room_id'],
-            'file_path' => '',
-            'started_at' => now(),
+        $url = env('RECORDING_SERVICE_URL', 'http://localhost:4000');
+        $secret = env('INTERNAL_API_SECRET', 'super-secret-key');
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $secret
+        ])->post("$url/recording/start", [
+            'roomId' => $data['roomId']
         ]);
 
-        return response()->json($rec);
+        if ($response->failed()) {
+            return response()->json(['error' => 'Failed to start recording', 'details' => $response->body()], 500);
+        }
+
+        return response()->json($response->json());
     }
 
     /**
-     * Stops a recording session.
+     * Stops a recording session (Manual).
      *
-     * @param int $id The ID of the recording to stop.
-     * @return \Illuminate\Http\JsonResponse JSON response with the updated recording.
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse JSON response.
      */
-    public function stop($id): JsonResponse
+    public function stop(Request $request): JsonResponse
     {
-        $rec = Recording::findOrFail($id);
-        $rec->update(['ended_at' => now()]);
+         $data = $request->validate([
+            'roomId' => 'required', // Room Name
+        ]);
 
-        return response()->json($rec);
+        $url = env('RECORDING_SERVICE_URL', 'http://localhost:4000');
+        $secret = env('INTERNAL_API_SECRET', 'super-secret-key');
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $secret
+        ])->post("$url/recording/stop", [
+            'roomId' => $data['roomId']
+        ]);
+
+         if ($response->failed()) {
+            return response()->json(['error' => 'Failed to stop recording', 'details' => $response->body()], 500);
+        }
+
+        return response()->json($response->json());
     }
 
     /**
-     * Internal endpoint called by Mediasoup when recording actually starts.
+     * Webhook for Recording Service.
      *
-     * @param \Illuminate\Http\Request $request The request object containing 'roomId' and 'filename'.
-     * @return \Illuminate\Http\JsonResponse JSON response with the recording ID.
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function internalStart(Request $request): JsonResponse
+    public function webhook(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'roomId' => 'required',
-            'filename' => 'required',
-        ]);
+        $secret = config('app.internal_api_secret', env('INTERNAL_API_SECRET'));
 
-        // Find the active room session or just link to the room
-        // For simplicity, we'll just link to the Room and the current User (if we can identify them, but here it's system)
-        // Actually, we should probably pass the 'roomSessionId' if we have it, or just the Room.
+        $header = $request->header('Authorization');
+        if ($header !== 'Bearer ' . $secret) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
 
-        $room = Room::where('name', $data['roomId'])->firstOrFail();
+        $event = $request->input('event');
+        $roomId = $request->input('roomId');
 
-        $rec = Recording::create([
-            'room_id' => $room->id,
-            'file_path' => $data['filename'], // Relative path in storage
-            'started_at' => now(),
-            'status' => 'recording', // We might need to add this column or just infer from ended_at
-        ]);
+        if ($event === 'recording.complete') {
+            try {
+                $room = Room::where('name', $roomId)->first();
+                if (!$room) {
+                    Log::error("Room not found for recording: $roomId");
+                    return response()->json(['error' => 'Room not found'], 404);
+                }
 
-        return response()->json(['id' => $rec->id]);
-    }
+                Recording::create([
+                    'room_id' => $room->id,
+                    'file_path' => $request->input('filePath'),
+                    'duration' => $request->input('duration'),
+                    'size' => $request->input('size'),
+                    'started_at' => now()->subSeconds($request->input('duration')),
+                    'ended_at' => now(),
+                    // 'resolution' => '720p', // Default
+                ]);
 
-    /**
-     * Internal endpoint called by Mediasoup when recording stops.
-     *
-     * @param \Illuminate\Http\Request $request The request object containing 'roomId' and 'filename'.
-     * @return \Illuminate\Http\JsonResponse JSON response indicating status.
-     */
-    public function internalStop(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'roomId' => 'required',
-            'filename' => 'required',
-        ]);
-
-        // Find the active recording for this file
-        $rec = Recording::where('file_path', $data['filename'])
-            ->whereNull('ended_at')
-            ->latest()
-            ->first();
-
-        if ($rec) {
-            $rec->update(['ended_at' => now()]);
+                Log::info("Recording saved for room: $roomId");
+            } catch (\Exception $e) {
+                Log::error("Failed to save recording: " . $e->getMessage());
+                return response()->json(['error' => 'Database error'], 500);
+            }
+        } elseif ($event === 'recording.failed') {
+            Log::error("Recording failed for room $roomId: " . $request->input('error'));
         }
 
         return response()->json(['status' => 'ok']);

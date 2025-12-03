@@ -17,6 +17,10 @@ app.use((req, res, next) => {
 // Routes
 app.use('/recording', recordingRoutes);
 
+// Serve recordings statically (if using local storage)
+const storagePath = process.env.LOCAL_STORAGE_PATH || 'recordings';
+app.use('/recordings', express.static(storagePath));
+
 // Health check (no auth required)
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });

@@ -3,6 +3,7 @@ import { getStorageService, IStorageService } from './storageService';
 import { LaravelNotifier } from './notifyLaravel';
 import { MediasoupConnector } from './mediasoupConnector';
 import logger from '../utils/logger';
+import { getFreeUdpPort } from '../utils/portFinder';
 import path from 'path';
 import fs from 'fs';
 
@@ -36,14 +37,20 @@ export class RecordingManager {
     }
 
     try {
-      // 1. Get SDP/Connection info from Mediasoup
-      const { sdp } = await this.mediasoupConnector.startRecordingTransport(roomId);
+      // 1. Find free UDP ports for Audio and Video
+      const audioPort = await getFreeUdpPort();
+      const videoPort = await getFreeUdpPort();
+      const recordingIp = '127.0.0.1'; // Ideally detect own IP or read from config
 
-      // 2. Prepare output path
+      // 2. Get SDP/Connection info from Mediasoup
+      // We pass our ports so Mediasoup can connect to them (Push model)
+      const { sdp } = await this.mediasoupConnector.startRecordingTransport(roomId, recordingIp, audioPort, videoPort);
+
+      // 3. Prepare output path
       const filename = `${roomId}_${Date.now()}.mp4`;
       const outputPath = path.join(this.localRecordingsDir, filename);
 
-      // 3. Start FFmpeg
+      // 4. Start FFmpeg
       const recorder = new FFmpegRecorder();
       await recorder.start({
         roomId,

@@ -1,5 +1,6 @@
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
+import axios from 'axios';
 import {
     Activity,
     BarChart3,
@@ -229,11 +230,45 @@ export function RoomMonitor({
     const [preferredLayer, setPreferredLayer] = useState<
         'auto' | 'high' | 'medium' | 'low'
     >(initialPreferredLayer);
-    const [recordings, setRecordings] = useState(MOCK_CLIPS);
+    const [recordings, setRecordings] = useState<any[]>([]);
 
     const lastStatsRef = useRef<
         Map<string, { timestamp: number; bytes: number }>
     >(new Map());
+
+    const fetchRecordings = async () => {
+        try {
+            const response = await axios.get(`/api/recordings?room_name=${roomId}`);
+            setRecordings(response.data.map((r: any) => ({
+                id: r.id,
+                name: r.file_path,
+                date: new Date(r.created_at).toLocaleString(),
+                size: r.size ? (r.size / 1024 / 1024).toFixed(2) + ' MB' : 'N/A',
+                url: r.file_path.startsWith('s3://')
+                    ? '#'
+                    : `${import.meta.env.VITE_RECORDING_SERVICE_URL || 'http://localhost:4000'}/recordings/${r.file_path}`
+            })));
+        } catch (e) {
+            console.error("Failed to fetch recordings", e);
+        }
+    };
+
+    useEffect(() => {
+        fetchRecordings();
+        const interval = setInterval(fetchRecordings, 10000);
+        return () => clearInterval(interval);
+    }, [roomId]);
+
+    const handleStopRecording = async () => {
+        if (!confirm('Are you sure you want to stop the recording?')) return;
+        try {
+             await axios.post('/api/recordings/stop', { roomId });
+             // alert('Recording stop requested');
+        } catch (e) {
+            console.error('Failed to stop recording', e);
+            alert('Failed to stop recording');
+        }
+    };
 
     // Real Stream Stats
     useEffect(() => {
@@ -746,7 +781,10 @@ export function RoomMonitor({
                         <span className="font-medium text-white">{roomId}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-2 rounded bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">
+                        <button
+                            onClick={handleStopRecording}
+                            className="flex items-center gap-2 rounded bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+                        >
                             <Square className="h-3 w-3 fill-current" />
                             STOP RECORDING
                         </button>
@@ -1041,7 +1079,7 @@ export function RoomMonitor({
                 <div className="flex-1 overflow-y-auto p-4">
                     <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-xs font-bold tracking-wider text-zinc-500 uppercase">
-                            Recent Clips (53)
+                            Recent Clips ({recordings.length})
                         </h3>
                     </div>
                     <div className="space-y-3">
@@ -1050,9 +1088,14 @@ export function RoomMonitor({
                                 key={clip.id}
                                 className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-800/30 p-2 transition-colors hover:border-zinc-700 hover:bg-zinc-800"
                             >
-                                <button className="flex h-8 w-8 items-center justify-center rounded bg-zinc-800 text-indigo-400 hover:bg-indigo-600 hover:text-white">
+                                <a
+                                    href={clip.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="flex h-8 w-8 items-center justify-center rounded bg-zinc-800 text-indigo-400 hover:bg-indigo-600 hover:text-white"
+                                >
                                     <Play className="h-3 w-3 fill-current" />
-                                </button>
+                                </a>
                                 <div className="flex-1 overflow-hidden">
                                     <div className="truncate text-xs font-medium text-zinc-300">
                                         {clip.name}
@@ -1061,18 +1104,6 @@ export function RoomMonitor({
                                         {clip.date} • {clip.size}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() =>
-                                        setRecordings((prev) =>
-                                            prev.filter(
-                                                (r) => r.id !== clip.id,
-                                            ),
-                                        )
-                                    }
-                                    className="text-zinc-500 hover:text-red-400"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </button>
                             </div>
                         ))}
                     </div>

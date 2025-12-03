@@ -3,6 +3,7 @@ import { FFmpegRecorder } from '../services/ffmpegRecorder';
 import { MediasoupConnector } from '../services/mediasoupConnector';
 import { LaravelNotifier } from '../services/notifyLaravel';
 import { IStorageService } from '../services/storageService';
+import { getFreeUdpPort } from '../utils/portFinder';
 import fs from 'fs';
 
 // Mock dependencies
@@ -10,6 +11,7 @@ jest.mock('../services/ffmpegRecorder');
 jest.mock('../services/mediasoupConnector');
 jest.mock('../services/notifyLaravel');
 jest.mock('../services/storageService');
+jest.mock('../utils/portFinder');
 jest.mock('fs');
 jest.mock('../utils/logger'); // Silence logs during tests
 
@@ -25,9 +27,11 @@ describe('RecordingManager', () => {
 
     // Setup return values
     (MediasoupConnector as jest.Mock).mockImplementation(() => ({
-      startRecordingTransport: jest.fn().mockResolvedValue({ sdp: 'mock-sdp' }),
+      startRecordingTransport: jest.fn().mockResolvedValue({ sdp: 'mock-sdp', transportId: 't1' }),
       stopRecordingTransport: jest.fn().mockResolvedValue(undefined),
     }));
+
+    (getFreeUdpPort as jest.Mock).mockResolvedValue(1234);
 
     (FFmpegRecorder as jest.Mock).mockImplementation(() => ({
         start: jest.fn().mockResolvedValue(undefined),
@@ -68,7 +72,8 @@ describe('RecordingManager', () => {
     const roomId = 'test-room';
     await recordingManager.startRecording(roomId);
 
-    expect(mockMediasoup.startRecordingTransport).toHaveBeenCalledWith(roomId);
+    expect(getFreeUdpPort).toHaveBeenCalledTimes(2);
+    expect(mockMediasoup.startRecordingTransport).toHaveBeenCalledWith(roomId, '127.0.0.1', 1234, 1234);
     expect(recordingManager.getRecordingStatus(roomId).status).toBe('recording');
   });
 

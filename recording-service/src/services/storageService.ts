@@ -29,7 +29,7 @@ export class LocalStorageService implements IStorageService {
     }
 
     await fs.promises.rename(filePath, destPath);
-    return destPath;
+    return destinationName; // Return filename relative to storage root
   }
 }
 

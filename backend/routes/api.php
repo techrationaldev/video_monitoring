@@ -22,8 +22,9 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/rooms', [RoomController::class, 'index']);
 
     // Recording
+    Route::get('/recordings', [RecordingController::class, 'index']);
     Route::post('/recordings/start', [RecordingController::class, 'start']);
-    Route::post('/recordings/{id}/stop', [RecordingController::class, 'stop']);
+    Route::post('/recordings/stop', [RecordingController::class, 'stop']);
 });
 
 Route::middleware(['web'])->group(function () {
@@ -36,8 +37,7 @@ Route::middleware(['web'])->group(function () {
 Route::middleware(['internal.auth'])->prefix('internal')->group(function () {
     Route::post('/stream-status', [App\Http\Controllers\Internal\StreamStatusController::class, 'update']);
     Route::post('/stream-status/reset', [App\Http\Controllers\Internal\StreamStatusController::class, 'reset']);
-
-    // Recording callbacks
-    Route::post('/recording/start', [App\Http\Controllers\RecordingController::class, 'internalStart']);
-    Route::post('/recording/stop', [App\Http\Controllers\RecordingController::class, 'internalStop']);
 });
+
+// Webhook for Recording Service (Has its own auth check in controller)
+Route::post('/recording/webhook', [App\Http\Controllers\RecordingController::class, 'webhook']);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -14,19 +15,35 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Recording extends Model
 {
+    use HasFactory;
+
     /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
      */
     protected $fillable = [
-        'session_id',
+        'room_session_id',
         'user_id',
         'room_id',
         'file_path',
         'resolution',
         'started_at',
-        'ended_at'
+        'ended_at',
+        'duration',
+        'size',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'started_at' => 'datetime',
+        'ended_at' => 'datetime',
+        'duration' => 'float',
+        'size' => 'integer',
     ];
 
     /**
@@ -40,12 +57,22 @@ class Recording extends Model
     }
 
     /**
-     * Get the user who created the recording.
+     * Get the room session associated with the recording.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
      */
-    public function user(): BelongsTo
+    public function session(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(RoomSession::class, 'room_session_id');
+    }
+
+    /**
+     * Get the user who initiated the recording.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

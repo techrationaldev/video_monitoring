@@ -5,6 +5,7 @@ import crypto from "crypto";
 import axios from "axios";
 import { rooms } from "./rooms.js";
 import { config } from "./config.js";
+import { apiServer } from "./api.js";
 
 let worker: types.Worker;
 let router: types.Router;
@@ -76,6 +77,11 @@ try {
 
 const wss = new WebSocketServer({ port: config.serverPort });
 console.log(`[SERVER] WS running on port ${config.serverPort}`);
+
+// Start API Server
+apiServer.listen(3001, () => {
+    console.log(`[SERVER] API listening on port 3001`);
+});
 
 /**
  * Interface representing a message received via WebSocket.
@@ -509,6 +515,57 @@ wss.on("connection", (ws: WebSocket, req) => {
             producerId: producer.id,
           })
         );
+
+        // Trigger Auto-Recording if not already started
+        // We do this by calling the Recording Service
+        // Only trigger if it's the first video or audio producer?
+        // Or trigger on every produce and let Recording Service handle deduplication?
+        // Recording Service throws if active.
+
+        // We only trigger if this is a streamer producing.
+        if (room.getProducers().length === 1 || room.getProducers().length === 2) {
+             // Try to start recording
+             // Ideally we wait for both audio/video, but we can start whenever.
+             // If we start now, and video comes later, we might miss it if SDP is generated only once?
+             // YES. Standard FFmpeg needs to know all streams upfront in SDP usually.
+
+             // So we should wait until we have what we expect.
+             // Typically a streamer publishes audio and video.
+             // Let's debounce or wait a bit?
+             // Or just trigger it and if it fails (already active), ignore.
+             // BUT, if we trigger on Audio, and Video comes 100ms later, the Recording Service
+             // will have started with ONLY Audio in SDP.
+             // Mediasoup recording usually requires updating the subscription or restarting?
+             // FFmpeg cannot dynamically add streams easily without complex restart.
+
+             // Simple fix: Wait for a short period or check if we have both?
+             // Or assume we always have both?
+             // Let's just trigger. If we miss video, we miss video.
+             // Ideally the client sends both rapidly.
+
+             // Better: Client (Streamer) sends "start-recording" action?
+             // OR: We wait for 2 seconds after first produce?
+
+             setTimeout(async () => {
+                 try {
+                     const currentProducers = room.getProducers();
+                     // Only start if we haven't already (check room state?)
+                     // Room class doesn't track "recording status" easily other than transports.
+                     if (room.recordingTransports.size === 0 && currentProducers.length > 0) {
+                        console.log(`[SERVER] Triggering auto-recording for room ${roomId}`);
+                        await axios.post('http://localhost:4000/recording/start', {
+                            roomId
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${config.internalApiSecret}`
+                            }
+                        });
+                     }
+                 } catch (err: any) {
+                     console.error(`[SERVER] Failed to trigger recording: ${err.message}`);
+                 }
+             }, 2000);
+        }
 
         // Notify other clients (Viewers) about the new producer
         for (const [otherClientId, otherWs] of room.clients) {

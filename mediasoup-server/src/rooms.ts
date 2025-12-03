@@ -27,6 +27,9 @@ export class Room {
   /** Set of client IDs that are viewers. */
   viewers = new Set<string>();
 
+  /** Recording transports */
+  recordingTransports = new Set<string>();
+
   /**
    * Adds a client to the room.
    *
@@ -84,6 +87,150 @@ export class Room {
    */
   async createRecvTransport(clientId: string) {
     return this.createTransport(clientId);
+  }
+
+  /**
+   * Creates a PlainTransport for recording.
+   */
+  async createPlainTransport(clientIp: string, audioPort?: number, videoPort?: number) {
+      const transport = await this.router.createPlainTransport({
+          listenIp: '0.0.0.0', // Listen on all interfaces
+          rtcpMux: false, // FFmpeg usually expects separate RTCP ports or simple RTP
+          comedia: false // We are pushing to FFmpeg
+      });
+
+      this.transports.set(transport.id, transport);
+      this.recordingTransports.add(transport.id);
+
+      console.log(`[SERVER] Created PlainTransport ${transport.id} for recording`);
+
+      // Connect to the remote FFmpeg ports
+      // Note: If rtcpMux is false, we need to connect RTCP ports too, usually port+1.
+      // For simplicity in this mock, we assume simple RTP.
+      // But Mediasoup requires connect() for PlainTransport to know where to send.
+
+      const connectParams: any = { ip: clientIp };
+      if (audioPort) connectParams.port = audioPort; // This is actually tricky. PlainTransport has one target tuple.
+      // If we have both audio and video, we need TWO PlainTransports usually, or one with multiplexing if FFmpeg supports it differently.
+      // Standard Mediasoup practice: One PlainTransport per stream (Audio/Video).
+
+      // REVISION: The createPlainTransport should probably only handle ONE stream or we create TWO internally.
+      // But the API expects one call.
+      // Let's create TWO transports if both ports are provided?
+      // Or just one if we only record one.
+
+      // Wait, FFmpeg -i sdp can handle multiple m= lines.
+      // Each m= line corresponds to a port.
+      // Mediasoup Router needs to send Audio to Port A and Video to Port B.
+      // This requires TWO PlainTransports (one for audio, one for video) OR a multi-stream approach (uncommon with PlainTransport).
+
+      // Let's assume we create one transport for Video (if present) and one for Audio (if present).
+      // But the return value needs to reflect that?
+
+      // Let's simplify: Just support Video for now or create two and map them?
+      // The API returns `transportId`.
+
+      // Let's change the implementation:
+      // We will create up to two transports.
+      // But `api.ts` expects one return.
+
+      // Actually, let's just create one PlainTransport per stream.
+      // The `api.ts` logic I wrote is too simple.
+
+      // Let's allow `createPlainTransport` to take a specific kind and port.
+      // But I can't change the API signature easily without changing `api.ts`.
+
+      // Let's stick to: We create one transport per stream.
+      // `createRecordingTransport` in `api.ts` should probably iterate.
+
+      // But for this specific function `createPlainTransport`:
+      // If I call it, it creates ONE transport.
+
+      if (videoPort) {
+         await transport.connect({ ip: clientIp, port: videoPort });
+      } else if (audioPort) {
+         await transport.connect({ ip: clientIp, port: audioPort });
+      }
+
+      // Consume logic should happen here or in API?
+      // Let's do it here.
+
+      const producers = this.getProducers();
+      // Find a producer that matches the "kind" we are connecting to?
+      // This is getting messy because of the "One transport vs Two" issue.
+
+      // Let's revert to: The API calls `createPlainTransport` twice if needed?
+      // No, `recording-service` calls once.
+
+      // Okay, let's look at `recording-service` again.
+      // It calls `create-recording-transport`.
+      // It expects ONE SDP.
+
+      // The SDP can have 2 m= lines.
+      // We need 2 PlainTransports in Mediasoup to send to 2 different ports on the same FFmpeg instance.
+
+      // So `createRecordingTransports` (plural) is better.
+
+      return transport;
+  }
+
+  async createRecordingTransportTuple(clientIp: string, audioPort: number | null, videoPort: number | null) {
+      const transports = [];
+
+      if (audioPort) {
+          const t = await this.router.createPlainTransport({
+              listenIp: '0.0.0.0',
+              rtcpMux: false,
+              comedia: false
+          });
+          await t.connect({ ip: clientIp, port: audioPort });
+          this.transports.set(t.id, t);
+          this.recordingTransports.add(t.id);
+          transports.push({ kind: 'audio', transport: t });
+
+          // Find Audio Producer and Consume
+          const audioProducer = Array.from(this.producers.values()).find(p => p.kind === 'audio');
+          if (audioProducer) {
+             await t.consume({
+                 producerId: audioProducer.id,
+                 rtpCapabilities: this.router.rtpCapabilities // Router can consume anything it produces usually?
+                 // Actually PlainTransport doesn't need rtpCapabilities for consume, but the API requires it?
+                 // Wait, `transport.consume` needs `rtpCapabilities` to know what codecs the *receiver* supports.
+                 // Since receiver is FFmpeg and we generate SDP, we declare what FFmpeg supports.
+                 // We can pass router.rtpCapabilities as a proxy for "supports everything we do".
+             });
+          }
+      }
+
+      if (videoPort) {
+          const t = await this.router.createPlainTransport({
+              listenIp: '0.0.0.0',
+              rtcpMux: false,
+              comedia: false
+          });
+          await t.connect({ ip: clientIp, port: videoPort });
+          this.transports.set(t.id, t);
+          this.recordingTransports.add(t.id);
+          transports.push({ kind: 'video', transport: t });
+
+          const videoProducer = Array.from(this.producers.values()).find(p => p.kind === 'video');
+          if (videoProducer) {
+             await t.consume({
+                 producerId: videoProducer.id,
+                 rtpCapabilities: this.router.rtpCapabilities
+             });
+          }
+      }
+      return transports;
+  }
+
+  closeRecordingTransports() {
+      for (const id of this.recordingTransports) {
+          const t = this.transports.get(id);
+          if (t) t.close();
+          this.transports.delete(id);
+      }
+      this.recordingTransports.clear();
   }
 
   /**

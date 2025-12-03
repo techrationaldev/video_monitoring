@@ -6,6 +6,13 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
+/**
+ * Class HandleInertiaRequests
+ *
+ * Middleware to handle Inertia.js requests and share data with the frontend.
+ *
+ * @package App\Http\Middleware
+ */
 class HandleInertiaRequests extends Middleware
 {
     /**
@@ -21,6 +28,8 @@ class HandleInertiaRequests extends Middleware
      * Determines the current asset version.
      *
      * @see https://inertiajs.com/asset-versioning
+     * @param \Illuminate\Http\Request $request The incoming request.
+     * @return string|null The asset version.
      */
     public function version(Request $request): ?string
     {
@@ -32,7 +41,8 @@ class HandleInertiaRequests extends Middleware
      *
      * @see https://inertiajs.com/shared-data
      *
-     * @return array<string, mixed>
+     * @param \Illuminate\Http\Request $request The incoming request.
+     * @return array<string, mixed> The shared props.
      */
     public function share(Request $request): array
     {

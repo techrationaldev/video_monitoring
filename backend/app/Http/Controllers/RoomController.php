@@ -5,19 +5,35 @@ namespace App\Http\Controllers;
 use App\Helpers\Log_Helper;
 use App\Models\Room;
 use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 
+/**
+ * Class RoomController
+ *
+ * Handles room management operations.
+ *
+ * @package App\Http\Controllers
+ */
 class RoomController extends Controller
 {
-    //
-
-    // GET /rooms
-    public function index()
+    /**
+     * Lists all rooms.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection Collection of all rooms with creator.
+     */
+    public function index(): Collection
     {
         return Room::with('creator')->get();
     }
 
-    // Create room
-    public function store(Request $request)
+    /**
+     * Creates a new room.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'name'.
+     * @return \Illuminate\Http\JsonResponse JSON response with message and created room.
+     */
+    public function store(Request $request): JsonResponse
     {
         $request->validate([
             'name' => 'required|string|max:255',
@@ -42,8 +58,13 @@ class RoomController extends Controller
         ], 201);
     }
 
-    // Get single room
-    public function show(Room $room)
+    /**
+     * Retrieves details of a specific room.
+     *
+     * @param \App\Models\Room $room The room instance.
+     * @return \App\Models\Room The room with creator details loaded.
+     */
+    public function show(Room $room): Room
     {
         return $room->load('creator');
     }

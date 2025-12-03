@@ -7,6 +7,13 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
+/**
+ * Class CreateNewUser
+ *
+ * Action to handle the creation of new users.
+ *
+ * @package App\Actions\Fortify
+ */
 class CreateNewUser implements CreatesNewUsers
 {
     use PasswordValidationRules;
@@ -14,7 +21,8 @@ class CreateNewUser implements CreatesNewUsers
     /**
      * Validate and create a newly registered user.
      *
-     * @param  array<string, string>  $input
+     * @param  array<string, string>  $input The input data for the new user.
+     * @return \App\Models\User The created user instance.
      */
     public function create(array $input): User
     {

@@ -6,6 +6,12 @@ use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+/**
+ * Settings Routes
+ *
+ * Registers routes for user settings (profile, password, 2FA).
+ */
+
 Route::middleware('auth')->group(function () {
     Route::redirect('settings', '/settings/profile');
 

@@ -2,18 +2,32 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Room;
 use App\Models\RoomSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\JsonResponse;
 
+/**
+ * Class RoomSessionController
+ *
+ * Handles room session management (joining and leaving rooms).
+ *
+ * @package App\Http\Controllers
+ */
 class RoomSessionController extends Controller
 {
-    //
-    // POST /rooms/{room}/join
-    public function join(Request $request, $roomId)
+    /**
+     * Joins a room, creating a new session.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'connection_id'.
+     * @param string $roomId The name of the room to join.
+     * @return \Illuminate\Http\JsonResponse JSON response with the created session.
+     */
+    public function join(Request $request, string $roomId): JsonResponse
     {
         // Ensure room exists (using name as ID)
-        $room = \App\Models\Room::firstOrCreate(
+        $room = Room::firstOrCreate(
             ['name' => $roomId],
             ['created_by' => Auth::id() ?? 1, 'active' => true]
         );
@@ -36,8 +50,13 @@ class RoomSessionController extends Controller
         return response()->json($session);
     }
 
-    // POST /room-sessions/{id}/leave
-    public function leave($id)
+    /**
+     * Leaves a room session.
+     *
+     * @param int $id The ID of the session to leave.
+     * @return \Illuminate\Http\JsonResponse JSON response indicating success.
+     */
+    public function leave(int $id): JsonResponse
     {
         $session = RoomSession::findOrFail($id);
 

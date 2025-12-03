@@ -7,11 +7,24 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
+use Inertia\Response;
+use Illuminate\Http\RedirectResponse;
 
+/**
+ * Class ClientController
+ *
+ * Manages client users in the admin panel.
+ *
+ * @package App\Http\Controllers\Admin
+ */
 class ClientController extends Controller
 {
-    //
-    public function index()
+    /**
+     * Lists all clients.
+     *
+     * @return \Inertia\Response Inertia response with the list of clients.
+     */
+    public function index(): Response
     {
         $clients = User::role('client')->paginate(20);
 
@@ -20,12 +33,23 @@ class ClientController extends Controller
         ]);
     }
 
-    public function create()
+    /**
+     * Shows the form to create a new client.
+     *
+     * @return \Inertia\Response Inertia response with the create form.
+     */
+    public function create(): Response
     {
         return Inertia::render('admin/clients/create');
     }
 
-    public function store(Request $request)
+    /**
+     * Stores a new client in the database.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing client details.
+     * @return \Illuminate\Http\RedirectResponse Redirect to the clients list.
+     */
+    public function store(Request $request): RedirectResponse
     {
         $request->validate([
             'name'     => 'required|string|max:255',
@@ -44,7 +68,13 @@ class ClientController extends Controller
         return redirect()->route('clients.index');
     }
 
-    public function edit(User $client)
+    /**
+     * Shows the form to edit an existing client.
+     *
+     * @param \App\Models\User $client The client user instance.
+     * @return \Inertia\Response Inertia response with the edit form.
+     */
+    public function edit(User $client): Response
     {
         if (!$client->hasRole('client')) {
             abort(403);
@@ -53,7 +83,14 @@ class ClientController extends Controller
         return Inertia::render('admin/clients/edit', ['client' => $client]);
     }
 
-    public function update(Request $request, User $client)
+    /**
+     * Updates an existing client.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing updated details.
+     * @param \App\Models\User $client The client user instance.
+     * @return \Illuminate\Http\RedirectResponse Redirect to the clients list.
+     */
+    public function update(Request $request, User $client): RedirectResponse
     {
         if (!$client->hasRole('client')) {
             abort(403);
@@ -72,7 +109,13 @@ class ClientController extends Controller
         return redirect()->route('clients.index');
     }
 
-    public function destroy(User $client)
+    /**
+     * Deletes a client.
+     *
+     * @param \App\Models\User $client The client user instance.
+     * @return \Illuminate\Http\RedirectResponse Redirect to the clients list.
+     */
+    public function destroy(User $client): RedirectResponse
     {
         if (!$client->hasRole('client')) {
             abort(403);

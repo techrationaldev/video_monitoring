@@ -1,5 +1,13 @@
 <?php
 
+/**
+ * Bootstrap the application.
+ *
+ * Configures the application, routing, middleware, and exceptions.
+ *
+ * @return \Illuminate\Foundation\Application The configured application instance.
+ */
+
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;

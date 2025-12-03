@@ -9,10 +9,19 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Class PasswordController
+ *
+ * Manages user password settings.
+ *
+ * @package App\Http\Controllers\Settings
+ */
 class PasswordController extends Controller
 {
     /**
      * Show the user's password settings page.
+     *
+     * @return \Inertia\Response Inertia response with the password form.
      */
     public function edit(): Response
     {
@@ -21,6 +30,9 @@ class PasswordController extends Controller
 
     /**
      * Update the user's password.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing current and new passwords.
+     * @return \Illuminate\Http\RedirectResponse Redirect back to the password edit page.
      */
     public function update(Request $request): RedirectResponse
     {

@@ -6,6 +6,12 @@ use App\Http\Controllers\RoomSessionController;
 use App\Http\Controllers\SystemLogController;
 use Illuminate\Support\Facades\Route;
 
+/**
+ * API Routes
+ *
+ * Registers API routes for the application.
+ * These routes are loaded by the RouteServiceProvider.
+ */
 
 Route::get('/health', function () {
     return ['status' => 'ok'];

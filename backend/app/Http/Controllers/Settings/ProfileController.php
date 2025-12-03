@@ -11,10 +11,20 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Class ProfileController
+ *
+ * Manages user profile settings.
+ *
+ * @package App\Http\Controllers\Settings
+ */
 class ProfileController extends Controller
 {
     /**
-     * Show the user's profile settings page.
+     * Shows the user's profile settings page.
+     *
+     * @param \Illuminate\Http\Request $request The request object.
+     * @return \Inertia\Response Inertia response with profile data.
      */
     public function edit(Request $request): Response
     {
@@ -25,7 +35,10 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update the user's profile settings.
+     * Updates the user's profile settings.
+     *
+     * @param \App\Http\Requests\Settings\ProfileUpdateRequest $request The validated request object.
+     * @return \Illuminate\Http\RedirectResponse Redirect back to the profile edit page.
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
@@ -41,7 +54,10 @@ class ProfileController extends Controller
     }
 
     /**
-     * Delete the user's account.
+     * Deletes the user's account.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing the password for confirmation.
+     * @return \Illuminate\Http\RedirectResponse Redirect to the home page.
      */
     public function destroy(Request $request): RedirectResponse
     {

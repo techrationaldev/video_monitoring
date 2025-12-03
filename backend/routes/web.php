@@ -6,6 +6,12 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
+/**
+ * Web Routes
+ *
+ * Registers web routes for the application.
+ */
+
 Route::get('/', function () {
     if (!Auth::check()) {
         return Inertia::render('welcome', [

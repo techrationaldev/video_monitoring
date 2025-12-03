@@ -3,10 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * Class Recording
+ *
+ * Represents a recording of a room session.
+ *
+ * @package App\Models
+ */
 class Recording extends Model
 {
-    //
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
     protected $fillable = [
         'session_id',
         'user_id',
@@ -17,12 +29,22 @@ class Recording extends Model
         'ended_at'
     ];
 
-    public function room()
+    /**
+     * Get the room associated with the recording.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
     }
 
-    public function user()
+    /**
+     * Get the user who created the recording.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }

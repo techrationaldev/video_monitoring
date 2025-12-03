@@ -7,10 +7,24 @@ use App\Models\RoomSession;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\JsonResponse;
 
+/**
+ * Class StreamStatusController
+ *
+ * Handles internal updates regarding stream status from the Mediasoup server.
+ *
+ * @package App\Http\Controllers\Internal
+ */
 class StreamStatusController extends Controller
 {
-    public function update(Request $request)
+    /**
+     * Updates the status of a stream session.
+     *
+     * @param \Illuminate\Http\Request $request The request object containing 'roomId', 'clientId', and 'status'.
+     * @return \Illuminate\Http\JsonResponse JSON response indicating status.
+     */
+    public function update(Request $request): JsonResponse
     {
         // Simple security check (in production, use a proper secret key)
         // For now, we'll assume the internal network is safe or add a basic check later
@@ -54,7 +68,14 @@ class StreamStatusController extends Controller
 
         return response()->json(['status' => 'ok']);
     }
-    public function reset()
+
+    /**
+     * Resets all live streams to offline.
+     * Useful when the media server restarts.
+     *
+     * @return \Illuminate\Http\JsonResponse JSON response with reset count.
+     */
+    public function reset(): JsonResponse
     {
         Log::info('Resetting all stream statuses to offline (Server Restart).');
 

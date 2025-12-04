@@ -153,6 +153,7 @@ export class Room {
           producerId: audioProducer.id,
           rtpCapabilities: this.router.rtpCapabilities,
           paused: true, // Start paused, wait for FFmpeg to be ready
+          appData: { transportId: t.id }, // Store transport ID in appData for retrieval
         });
         this.consumers.set(consumer.id, consumer);
         console.log(
@@ -186,6 +187,7 @@ export class Room {
           producerId: videoProducer.id,
           rtpCapabilities: this.router.rtpCapabilities,
           paused: true, // Start paused, wait for FFmpeg to be ready
+          appData: { transportId: t.id }, // Store transport ID in appData for retrieval
         });
         this.consumers.set(consumer.id, consumer);
         console.log(
@@ -220,10 +222,12 @@ export class Room {
 
     // Find all consumers associated with recording transports
     for (const [consumerId, consumer] of this.consumers) {
-       if ((consumer as any).transportId && this.recordingTransports.has((consumer as any).transportId)) {
+       // Check if consumer has appData.transportId that matches a recording transport
+       const transportId = (consumer.appData as any).transportId;
+       if (transportId && this.recordingTransports.has(transportId)) {
            if (consumer.paused) {
                await consumer.resume();
-               console.log(`[SERVER] Resumed consumer ${consumer.id}`);
+               console.log(`[SERVER] Resumed consumer ${consumer.id} on transport ${transportId}`);
 
                if (consumer.kind === 'video') {
                    try {

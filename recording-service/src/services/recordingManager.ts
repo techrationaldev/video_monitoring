@@ -42,6 +42,9 @@ export class RecordingManager {
 
     this.pendingRooms.add(roomId);
 
+    // Track recorder locally to ensure cleanup on error
+    let recorder: FFmpegRecorder | null = null;
+
     try {
       // 1. Find free UDP ports for Audio and Video
       const audioPort = await getFreeUdpPort();
@@ -67,7 +70,7 @@ export class RecordingManager {
 
       // 4. Start FFmpeg (Starts listening on ports)
       logger.info(`[RecordingManager] Starting FFmpeg process for room ${roomId}...`);
-      const recorder = new FFmpegRecorder();
+      recorder = new FFmpegRecorder();
       await recorder.start({
         roomId,
         sdp,
@@ -94,8 +97,17 @@ export class RecordingManager {
       logger.error(
         `Error starting recording for room ${roomId}: ${error.message}`
       );
-      // Cleanup if needed (stop ffmpeg if started, close transport)
-      // TODO: Improve cleanup on partial failure
+
+      // Cleanup if needed (stop ffmpeg if started)
+      if (recorder && recorder.isActive) {
+        logger.info(`[RecordingManager] Stopping orphan FFmpeg process for room ${roomId}...`);
+        try {
+          await recorder.stop();
+        } catch (cleanupError: any) {
+          logger.error(`[RecordingManager] Failed to stop orphan FFmpeg: ${cleanupError.message}`);
+        }
+      }
+
       await this.notifier.notifyRecordingFailed(roomId, error.message);
       throw error;
     } finally {

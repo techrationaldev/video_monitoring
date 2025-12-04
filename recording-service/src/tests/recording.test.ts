@@ -29,6 +29,7 @@ describe('RecordingManager', () => {
     (MediasoupConnector as jest.Mock).mockImplementation(() => ({
       startRecordingTransport: jest.fn().mockResolvedValue({ sdp: 'mock-sdp', transportId: 't1' }),
       stopRecordingTransport: jest.fn().mockResolvedValue(undefined),
+      resumeRecording: jest.fn().mockResolvedValue(undefined),
     }));
 
     (getFreeUdpPort as jest.Mock).mockResolvedValue(1234);
@@ -74,6 +75,7 @@ describe('RecordingManager', () => {
 
     expect(getFreeUdpPort).toHaveBeenCalledTimes(2);
     expect(mockMediasoup.startRecordingTransport).toHaveBeenCalledWith(roomId, '127.0.0.1', 1234, 1234);
+    expect(mockMediasoup.resumeRecording).toHaveBeenCalledWith(roomId);
     expect(recordingManager.getRecordingStatus(roomId).status).toBe('recording');
   });
 
@@ -81,7 +83,7 @@ describe('RecordingManager', () => {
     const roomId = 'test-room';
     await recordingManager.startRecording(roomId);
 
-    await expect(recordingManager.startRecording(roomId)).rejects.toThrow(`Recording already active for room ${roomId}`);
+    await expect(recordingManager.startRecording(roomId)).rejects.toThrow(`Recording already active or pending for room ${roomId}`);
   });
 
   it('should stop recording and notify laravel', async () => {

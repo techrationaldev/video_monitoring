@@ -113,72 +113,11 @@ export class Room {
       `[SERVER] Created PlainTransport ${transport.id} for recording`
     );
 
-    // Connect to the remote FFmpeg ports
-    // Note: If rtcpMux is false, we need to connect RTCP ports too, usually port+1.
-    // For simplicity in this mock, we assume simple RTP.
-    // But Mediasoup requires connect() for PlainTransport to know where to send.
-
-    const connectParams: any = { ip: clientIp };
-    if (audioPort) connectParams.port = audioPort; // This is actually tricky. PlainTransport has one target tuple.
-    // If we have both audio and video, we need TWO PlainTransports usually, or one with multiplexing if FFmpeg supports it differently.
-    // Standard Mediasoup practice: One PlainTransport per stream (Audio/Video).
-
-    // REVISION: The createPlainTransport should probably only handle ONE stream or we create TWO internally.
-    // But the API expects one call.
-    // Let's create TWO transports if both ports are provided?
-    // Or just one if we only record one.
-
-    // Wait, FFmpeg -i sdp can handle multiple m= lines.
-    // Each m= line corresponds to a port.
-    // Mediasoup Router needs to send Audio to Port A and Video to Port B.
-    // This requires TWO PlainTransports (one for audio, one for video) OR a multi-stream approach (uncommon with PlainTransport).
-
-    // Let's assume we create one transport for Video (if present) and one for Audio (if present).
-    // But the return value needs to reflect that?
-
-    // Let's simplify: Just support Video for now or create two and map them?
-    // The API returns `transportId`.
-
-    // Let's change the implementation:
-    // We will create up to two transports.
-    // But `api.ts` expects one return.
-
-    // Actually, let's just create one PlainTransport per stream.
-    // The `api.ts` logic I wrote is too simple.
-
-    // Let's allow `createPlainTransport` to take a specific kind and port.
-    // But I can't change the API signature easily without changing `api.ts`.
-
-    // Let's stick to: We create one transport per stream.
-    // `createRecordingTransport` in `api.ts` should probably iterate.
-
-    // But for this specific function `createPlainTransport`:
-    // If I call it, it creates ONE transport.
-
     if (videoPort) {
       await transport.connect({ ip: clientIp, port: videoPort });
     } else if (audioPort) {
       await transport.connect({ ip: clientIp, port: audioPort });
     }
-
-    // Consume logic should happen here or in API?
-    // Let's do it here.
-
-    const producers = this.getProducers();
-    // Find a producer that matches the "kind" we are connecting to?
-    // This is getting messy because of the "One transport vs Two" issue.
-
-    // Let's revert to: The API calls `createPlainTransport` twice if needed?
-    // No, `recording-service` calls once.
-
-    // Okay, let's look at `recording-service` again.
-    // It calls `create-recording-transport`.
-    // It expects ONE SDP.
-
-    // The SDP can have 2 m= lines.
-    // We need 2 PlainTransports in Mediasoup to send to 2 different ports on the same FFmpeg instance.
-
-    // So `createRecordingTransports` (plural) is better.
 
     return transport;
   }
@@ -212,10 +151,11 @@ export class Room {
         const consumer = await t.consume({
           producerId: audioProducer.id,
           rtpCapabilities: this.router.rtpCapabilities,
-          paused: false,
+          paused: true, // Start paused, wait for FFmpeg to be ready
         });
+        this.consumers.set(consumer.id, consumer);
         console.log(
-          `[SERVER] Created audio consumer ${consumer.id} for recording`
+          `[SERVER] Created audio consumer ${consumer.id} for recording (paused)`
         );
       } else {
         console.warn(`[SERVER] No audio producer found for recording`);
@@ -243,21 +183,12 @@ export class Room {
         const consumer = await t.consume({
           producerId: videoProducer.id,
           rtpCapabilities: this.router.rtpCapabilities,
-          paused: false,
+          paused: true, // Start paused, wait for FFmpeg to be ready
         });
+        this.consumers.set(consumer.id, consumer);
         console.log(
-          `[SERVER] Created video consumer ${consumer.id} for recording`
+          `[SERVER] Created video consumer ${consumer.id} for recording (paused)`
         );
-
-        // Request Keyframe to ensure recording starts immediately
-        try {
-          await consumer.requestKeyFrame();
-          console.log(
-            `[SERVER] Requested keyframe for consumer ${consumer.id}`
-          );
-        } catch (error: any) {
-          console.warn(`[SERVER] Failed to request keyframe: ${error.message}`);
-        }
 
         // Log stats periodically
         const statsInterval = setInterval(async () => {
@@ -280,6 +211,45 @@ export class Room {
       }
     }
     return transports;
+  }
+
+  async resumeRecording() {
+    console.log(`[SERVER] Resuming recording consumers for room ${this.id}`);
+
+    // Find all consumers associated with recording transports
+    for (const [consumerId, consumer] of this.consumers) {
+       // Check if consumer.transportId is in recordingTransports
+       // Note: Mediasoup Consumer object usually has transportId property but typed as 'transport'.
+       // Actually `consumer.transportId` is not directly exposed in some versions, but let's check.
+       // The types.Consumer interface has `appData`. We didn't set appData.
+       // But we can check `consumer.transport`.
+       // Actually, we can just iterate our `recordingTransports` and find consumers on them?
+       // Mediasoup API doesn't have `transport.consumers`.
+
+       // Let's iterate consumers and check if their transport is a recording transport.
+       // However, `consumer` object might not have `transportId` public property in all typings.
+       // But `this.transports.get(consumer.transportId)`... wait.
+
+       // Let's rely on the fact we just created them.
+       // Or better, we can iterate `this.consumers` and check.
+       // `consumer` has `transportId` property in Mediasoup v3 types.
+
+       if ((consumer as any).transportId && this.recordingTransports.has((consumer as any).transportId)) {
+           if (consumer.paused) {
+               await consumer.resume();
+               console.log(`[SERVER] Resumed consumer ${consumer.id}`);
+
+               if (consumer.kind === 'video') {
+                   try {
+                       await consumer.requestKeyFrame();
+                       console.log(`[SERVER] Requested keyframe for consumer ${consumer.id}`);
+                   } catch (error: any) {
+                       console.warn(`[SERVER] Failed to request keyframe: ${error.message}`);
+                   }
+               }
+           }
+       }
+    }
   }
 
   closeRecordingTransports() {

@@ -87,6 +87,21 @@ app.post("/create-recording-transport", checkAuth, async (req, res) => {
   }
 });
 
+app.post("/resume-recording", checkAuth, async (req, res) => {
+  const { roomId } = req.body;
+  const room = rooms.get(roomId);
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+  try {
+    await room.resumeRecording();
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Error resuming recording:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/close-recording-transport", checkAuth, async (req, res) => {
   const { roomId } = req.body; // In real implementation, we might need transportId too
   // For simplicity, we assume one recording per room or handle it in Room class

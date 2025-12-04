@@ -44,6 +44,7 @@ export class FFmpegRecorder {
           "debug",
         ])
         .outputOptions([
+          "-map", "0", // Map all streams from input 0
           "-c:v",
           "libx264", // Transcode to H.264
           "-preset",

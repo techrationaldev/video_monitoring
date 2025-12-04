@@ -68,6 +68,9 @@ export class RecordingManager {
         outputPath,
       });
 
+      // Wait a moment for FFmpeg to initialize and bind UDP ports
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // 5. Resume Mediasoup Consumers (Trigger KeyFrame now that FFmpeg is ready)
       await this.mediasoupConnector.resumeRecording(roomId);
 

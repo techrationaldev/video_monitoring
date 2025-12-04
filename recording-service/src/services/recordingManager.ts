@@ -35,6 +35,7 @@ export class RecordingManager {
   }
 
   async startRecording(roomId: string): Promise<void> {
+    logger.info(`[RecordingManager] Entering startRecording for room ${roomId}`);
     if (this.sessions.has(roomId) || this.pendingRooms.has(roomId)) {
       throw new Error(`Recording already active or pending for room ${roomId}`);
     }
@@ -47,20 +48,25 @@ export class RecordingManager {
       const videoPort = await getFreeUdpPort();
       const recordingIp = "127.0.0.1"; // Ideally detect own IP or read from config
 
+      logger.info(`[RecordingManager] Allocated ports for room ${roomId}: Audio=${audioPort}, Video=${videoPort}`);
+
       // 2. Get SDP/Connection info from Mediasoup (Consumers are PAUSED initially)
       // We pass our ports so Mediasoup can connect to them (Push model)
+      logger.info(`[RecordingManager] Requesting Mediasoup transport for room ${roomId}...`);
       const { sdp } = await this.mediasoupConnector.startRecordingTransport(
         roomId,
         recordingIp,
         audioPort,
         videoPort
       );
+      logger.info(`[RecordingManager] Received SDP from Mediasoup for room ${roomId}. SDP Length: ${sdp.length}`);
 
       // 3. Prepare output path
       const filename = `${roomId}_${Date.now()}.mp4`;
       const outputPath = path.join(this.localRecordingsDir, filename);
 
       // 4. Start FFmpeg (Starts listening on ports)
+      logger.info(`[RecordingManager] Starting FFmpeg process for room ${roomId}...`);
       const recorder = new FFmpegRecorder();
       await recorder.start({
         roomId,
@@ -69,9 +75,11 @@ export class RecordingManager {
       });
 
       // Wait a moment for FFmpeg to initialize and bind UDP ports
+      logger.info(`[RecordingManager] FFmpeg started. Waiting 1000ms for socket binding...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // 5. Resume Mediasoup Consumers (Trigger KeyFrame now that FFmpeg is ready)
+      logger.info(`[RecordingManager] Resuming Mediasoup consumers for room ${roomId}...`);
       await this.mediasoupConnector.resumeRecording(roomId);
 
       // 6. Store session
@@ -81,7 +89,7 @@ export class RecordingManager {
         outputPath,
       });
 
-      logger.info(`Recording started for room ${roomId}`);
+      logger.info(`[RecordingManager] Mediasoup consumers resumed. Recording setup complete for room ${roomId}`);
     } catch (error: any) {
       logger.error(
         `Error starting recording for room ${roomId}: ${error.message}`
@@ -96,6 +104,7 @@ export class RecordingManager {
   }
 
   async stopRecording(roomId: string): Promise<void> {
+    logger.info(`[RecordingManager] Entering stopRecording for room ${roomId}`);
     const session = this.sessions.get(roomId);
     if (!session) {
       throw new Error(`No active recording for room ${roomId}`);
@@ -103,31 +112,42 @@ export class RecordingManager {
 
     try {
       // 1. Stop FFmpeg
+      logger.info(`[RecordingManager] Stopping FFmpeg for room ${roomId}...`);
       await session.recorder.stop();
+      logger.info(`[RecordingManager] FFmpeg stopped for room ${roomId}`);
 
       // 2. Stop Mediasoup Transport
+      logger.info(`[RecordingManager] Closing Mediasoup transport for room ${roomId}...`);
       await this.mediasoupConnector.stopRecordingTransport(roomId);
 
       // 3. Calculate stats
       const duration = (Date.now() - session.startTime) / 1000;
-      const stats = fs.statSync(session.outputPath);
-      const size = stats.size;
+      let size = 0;
+      if (fs.existsSync(session.outputPath)) {
+          const stats = fs.statSync(session.outputPath);
+          size = stats.size;
+      }
+      logger.info(`[RecordingManager] Processing file stats for room ${roomId}: Duration=${duration}s, Size=${size} bytes`);
 
       // 4. Upload/Move file
       const filename = path.basename(session.outputPath);
+      logger.info(`[RecordingManager] Uploading file for room ${roomId}...`);
       const finalPath = await this.storageService.uploadFile(
         session.outputPath,
         filename
       );
+      logger.info(`[RecordingManager] File uploaded to ${finalPath}`);
 
       // 5. Notify Laravel (Don't fail the whole stop process if this fails)
       try {
+        logger.info(`[RecordingManager] Notifying backend for room ${roomId}...`);
         await this.notifier.notifyRecordingComplete(
           roomId,
           finalPath,
           duration,
           size
         );
+        logger.info(`[RecordingManager] Backend notified for room ${roomId}`);
       } catch (notifyError: any) {
         logger.error(
           `Failed to notify Laravel backend: ${notifyError.message}`
@@ -137,7 +157,7 @@ export class RecordingManager {
       // 6. Cleanup
       this.sessions.delete(roomId);
       logger.info(
-        `Recording stopped for room ${roomId}. Saved to ${finalPath}`
+        `[RecordingManager] Recording stopped for room ${roomId}. Cleanup complete.`
       );
     } catch (error: any) {
       logger.error(

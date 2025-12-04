@@ -72,18 +72,6 @@ export class FFmpegRecorder {
           this.isRecording = false;
 
           // If the promise hasn't settled yet (startup failure), reject it
-          // We can check if isRecording was set to true in 'start' event,
-          // but since 'start' usually fires before 'error' if the process spawned,
-          // we might need a flag indicating if we already resolved.
-          // However, fluent-ffmpeg 'error' can fire if spawn fails.
-          // A simple heuristic is: if we haven't resolved yet, reject.
-          // But we can't easily know promise state.
-          // Instead, we can rely on the fact that if 'start' happened, we resolved.
-          // But 'start' is synchronous here.
-
-          // Better approach: Since 'start' event resolves the promise, if we get error and haven't started, we reject.
-          // Note: 'start' event fires when the process is spawned.
-
           reject(new Error(`FFmpeg failed to start: ${err.message}`));
         })
         .on("end", () => {
@@ -101,8 +89,10 @@ export class FFmpegRecorder {
       const sizeInterval = setInterval(() => {
         if (this.isRecording && fs.existsSync(outputPath)) {
           const stats = fs.statSync(outputPath);
-          const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
-          logger.info(`[FFmpeg] Recording size: ${sizeMB} MB`);
+          const bytes = stats.size;
+          const kb = (bytes / 1024).toFixed(2);
+          const mb = (bytes / (1024 * 1024)).toFixed(2);
+          logger.info(`[FFmpeg] Room ${roomId} Recording size: ${bytes} bytes | ${kb} KB | ${mb} MB`);
         }
       }, 5000);
 

@@ -30,6 +30,7 @@ app.post("/create-recording-transport", checkAuth, async (req, res) => {
 
   try {
     // Create PlainTransports for recording (one per stream)
+    // transports is Array<{ kind: string, transport: PlainTransport }>
     const transports = await room.createRecordingTransportTuple(
       recordingIp,
       audioPort,
@@ -72,10 +73,10 @@ app.post("/create-recording-transport", checkAuth, async (req, res) => {
       videoCodec
     );
 
-    // We return the first transport ID just as a handle, but technically we have multiple.
-    // For 'close', we call closeRecordingTransports which cleans all.
+    // We return the first transport ID just as a handle.
+    // Ensure we handle the array correctly.
     const mainTransport =
-      transports.length > 0 ? transports[0].transport.id : "none";
+      transports && transports.length > 0 ? transports[0].transport.id : "none";
 
     res.json({
       transportId: mainTransport,

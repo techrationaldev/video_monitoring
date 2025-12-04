@@ -100,6 +100,7 @@ export class Room {
     }
     async createRecordingTransportTuple(clientIp, audioPort, videoPort) {
         const transports = [];
+        // Create transport for audio if port is provided
         if (audioPort) {
             const t = await this.router.createPlainTransport({
                 listenIp: "0.0.0.0",
@@ -118,6 +119,7 @@ export class Room {
                     producerId: audioProducer.id,
                     rtpCapabilities: this.router.rtpCapabilities,
                     paused: true, // Start paused, wait for FFmpeg to be ready
+                    appData: { transportId: t.id }, // Store transport ID in appData for retrieval
                 });
                 this.consumers.set(consumer.id, consumer);
                 console.log(`[SERVER] Created audio consumer ${consumer.id} for recording (paused)`);
@@ -126,6 +128,7 @@ export class Room {
                 console.warn(`[SERVER] No audio producer found for recording`);
             }
         }
+        // Create transport for video if port is provided (independent of audio)
         if (videoPort) {
             const t = await this.router.createPlainTransport({
                 listenIp: "0.0.0.0",
@@ -143,6 +146,7 @@ export class Room {
                     producerId: videoProducer.id,
                     rtpCapabilities: this.router.rtpCapabilities,
                     paused: true, // Start paused, wait for FFmpeg to be ready
+                    appData: { transportId: t.id }, // Store transport ID in appData for retrieval
                 });
                 this.consumers.set(consumer.id, consumer);
                 console.log(`[SERVER] Created video consumer ${consumer.id} for recording (paused)`);
@@ -170,23 +174,12 @@ export class Room {
         console.log(`[SERVER] Resuming recording consumers for room ${this.id}`);
         // Find all consumers associated with recording transports
         for (const [consumerId, consumer] of this.consumers) {
-            // Check if consumer.transportId is in recordingTransports
-            // Note: Mediasoup Consumer object usually has transportId property but typed as 'transport'.
-            // Actually `consumer.transportId` is not directly exposed in some versions, but let's check.
-            // The types.Consumer interface has `appData`. We didn't set appData.
-            // But we can check `consumer.transport`.
-            // Actually, we can just iterate our `recordingTransports` and find consumers on them?
-            // Mediasoup API doesn't have `transport.consumers`.
-            // Let's iterate consumers and check if their transport is a recording transport.
-            // However, `consumer` object might not have `transportId` public property in all typings.
-            // But `this.transports.get(consumer.transportId)`... wait.
-            // Let's rely on the fact we just created them.
-            // Or better, we can iterate `this.consumers` and check.
-            // `consumer` has `transportId` property in Mediasoup v3 types.
-            if (consumer.transportId && this.recordingTransports.has(consumer.transportId)) {
+            // Check if consumer has appData.transportId that matches a recording transport
+            const transportId = consumer.appData.transportId;
+            if (transportId && this.recordingTransports.has(transportId)) {
                 if (consumer.paused) {
                     await consumer.resume();
-                    console.log(`[SERVER] Resumed consumer ${consumer.id}`);
+                    console.log(`[SERVER] Resumed consumer ${consumer.id} on transport ${transportId}`);
                     if (consumer.kind === 'video') {
                         try {
                             await consumer.requestKeyFrame();

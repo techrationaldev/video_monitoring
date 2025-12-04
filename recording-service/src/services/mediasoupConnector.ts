@@ -41,6 +41,24 @@ export class MediasoupConnector {
     }
   }
 
+  async resumeRecording(roomId: string): Promise<void> {
+    try {
+      logger.info(`Requesting Mediasoup to resume recording consumers for room ${roomId}`);
+      await axios.post(`${this.mediasoupUrl}/resume-recording`, {
+        roomId
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.apiSecret}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (error: any) {
+      logger.error(`Failed to resume recording: ${error.message}`);
+      // Not throwing here might result in empty recording if video doesn't start, but we should probably throw.
+      throw new Error('Failed to resume recording with Mediasoup');
+    }
+  }
+
   // Notify Mediasoup to close the transport
   async stopRecordingTransport(roomId: string): Promise<void> {
     try {

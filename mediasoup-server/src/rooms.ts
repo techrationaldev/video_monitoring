@@ -129,6 +129,7 @@ export class Room {
   ) {
     const transports = [];
 
+    // Create transport for audio if port is provided
     if (audioPort) {
       const t = await this.router.createPlainTransport({
         listenIp: "0.0.0.0",
@@ -162,6 +163,7 @@ export class Room {
       }
     }
 
+    // Create transport for video if port is provided (independent of audio)
     if (videoPort) {
       const t = await this.router.createPlainTransport({
         listenIp: "0.0.0.0",
@@ -218,22 +220,6 @@ export class Room {
 
     // Find all consumers associated with recording transports
     for (const [consumerId, consumer] of this.consumers) {
-       // Check if consumer.transportId is in recordingTransports
-       // Note: Mediasoup Consumer object usually has transportId property but typed as 'transport'.
-       // Actually `consumer.transportId` is not directly exposed in some versions, but let's check.
-       // The types.Consumer interface has `appData`. We didn't set appData.
-       // But we can check `consumer.transport`.
-       // Actually, we can just iterate our `recordingTransports` and find consumers on them?
-       // Mediasoup API doesn't have `transport.consumers`.
-
-       // Let's iterate consumers and check if their transport is a recording transport.
-       // However, `consumer` object might not have `transportId` public property in all typings.
-       // But `this.transports.get(consumer.transportId)`... wait.
-
-       // Let's rely on the fact we just created them.
-       // Or better, we can iterate `this.consumers` and check.
-       // `consumer` has `transportId` property in Mediasoup v3 types.
-
        if ((consumer as any).transportId && this.recordingTransports.has((consumer as any).transportId)) {
            if (consumer.paused) {
                await consumer.resume();

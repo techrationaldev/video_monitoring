@@ -1,11 +1,11 @@
-import { FFmpegRecorder } from './ffmpegRecorder';
-import { getStorageService, IStorageService } from './storageService';
-import { LaravelNotifier } from './notifyLaravel';
-import { MediasoupConnector } from './mediasoupConnector';
-import logger from '../utils/logger';
-import { getFreeUdpPort } from '../utils/portFinder';
-import path from 'path';
-import fs from 'fs';
+import { FFmpegRecorder } from "./ffmpegRecorder";
+import { getStorageService, IStorageService } from "./storageService";
+import { LaravelNotifier } from "./notifyLaravel";
+import { MediasoupConnector } from "./mediasoupConnector";
+import logger from "../utils/logger";
+import { getFreeUdpPort } from "../utils/portFinder";
+import path from "path";
+import fs from "fs";
 
 interface RecordingSession {
   recorder: FFmpegRecorder;
@@ -15,6 +15,7 @@ interface RecordingSession {
 
 export class RecordingManager {
   private sessions: Map<string, RecordingSession> = new Map();
+  private pendingRooms: Set<string> = new Set();
   private storageService: IStorageService;
   private notifier: LaravelNotifier;
   private mediasoupConnector: MediasoupConnector;
@@ -24,7 +25,9 @@ export class RecordingManager {
     this.storageService = getStorageService();
     this.notifier = new LaravelNotifier();
     this.mediasoupConnector = new MediasoupConnector();
-    this.localRecordingsDir = path.resolve(process.env.LOCAL_RECORDING_TEMP_PATH || 'recordings/temp');
+    this.localRecordingsDir = path.resolve(
+      process.env.LOCAL_RECORDING_TEMP_PATH || "recordings/temp"
+    );
 
     if (!fs.existsSync(this.localRecordingsDir)) {
       fs.mkdirSync(this.localRecordingsDir, { recursive: true });
@@ -32,19 +35,26 @@ export class RecordingManager {
   }
 
   async startRecording(roomId: string): Promise<void> {
-    if (this.sessions.has(roomId)) {
-      throw new Error(`Recording already active for room ${roomId}`);
+    if (this.sessions.has(roomId) || this.pendingRooms.has(roomId)) {
+      throw new Error(`Recording already active or pending for room ${roomId}`);
     }
+
+    this.pendingRooms.add(roomId);
 
     try {
       // 1. Find free UDP ports for Audio and Video
       const audioPort = await getFreeUdpPort();
       const videoPort = await getFreeUdpPort();
-      const recordingIp = '127.0.0.1'; // Ideally detect own IP or read from config
+      const recordingIp = "127.0.0.1"; // Ideally detect own IP or read from config
 
       // 2. Get SDP/Connection info from Mediasoup
       // We pass our ports so Mediasoup can connect to them (Push model)
-      const { sdp } = await this.mediasoupConnector.startRecordingTransport(roomId, recordingIp, audioPort, videoPort);
+      const { sdp } = await this.mediasoupConnector.startRecordingTransport(
+        roomId,
+        recordingIp,
+        audioPort,
+        videoPort
+      );
 
       // 3. Prepare output path
       const filename = `${roomId}_${Date.now()}.mp4`;
@@ -55,22 +65,25 @@ export class RecordingManager {
       await recorder.start({
         roomId,
         sdp,
-        outputPath
+        outputPath,
       });
 
       // 4. Store session
       this.sessions.set(roomId, {
         recorder,
         startTime: Date.now(),
-        outputPath
+        outputPath,
       });
 
       logger.info(`Recording started for room ${roomId}`);
-
     } catch (error: any) {
-      logger.error(`Error starting recording for room ${roomId}: ${error.message}`);
+      logger.error(
+        `Error starting recording for room ${roomId}: ${error.message}`
+      );
       await this.notifier.notifyRecordingFailed(roomId, error.message);
       throw error;
+    } finally {
+      this.pendingRooms.delete(roomId);
     }
   }
 
@@ -94,17 +107,34 @@ export class RecordingManager {
 
       // 4. Upload/Move file
       const filename = path.basename(session.outputPath);
-      const finalPath = await this.storageService.uploadFile(session.outputPath, filename);
+      const finalPath = await this.storageService.uploadFile(
+        session.outputPath,
+        filename
+      );
 
-      // 5. Notify Laravel
-      await this.notifier.notifyRecordingComplete(roomId, finalPath, duration, size);
+      // 5. Notify Laravel (Don't fail the whole stop process if this fails)
+      try {
+        await this.notifier.notifyRecordingComplete(
+          roomId,
+          finalPath,
+          duration,
+          size
+        );
+      } catch (notifyError: any) {
+        logger.error(
+          `Failed to notify Laravel backend: ${notifyError.message}`
+        );
+      }
 
       // 6. Cleanup
       this.sessions.delete(roomId);
-      logger.info(`Recording stopped for room ${roomId}. Saved to ${finalPath}`);
-
+      logger.info(
+        `Recording stopped for room ${roomId}. Saved to ${finalPath}`
+      );
     } catch (error: any) {
-      logger.error(`Error stopping recording for room ${roomId}: ${error.message}`);
+      logger.error(
+        `Error stopping recording for room ${roomId}: ${error.message}`
+      );
       // Even if upload fails, we should try to notify or cleanup
       throw error;
     }
@@ -113,12 +143,12 @@ export class RecordingManager {
   getRecordingStatus(roomId: string) {
     const session = this.sessions.get(roomId);
     if (!session) {
-      return { status: 'idle' };
+      return { status: "idle" };
     }
     return {
-      status: 'recording',
+      status: "recording",
       startTime: new Date(session.startTime).toISOString(),
-      duration: (Date.now() - session.startTime) / 1000
+      duration: (Date.now() - session.startTime) / 1000,
     };
   }
 }

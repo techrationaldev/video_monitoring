@@ -173,26 +173,37 @@ import { types } from "mediasoup";
  *             This seems most robust.
  */
 
- // For now, I'll write the SDP Utils to support generating the string.
+// For now, I'll write the SDP Utils to support generating the string.
 
- export function generateSDP(ip: string, audioPort: number | null, videoPort: number | null, audioCodec: any, videoCodec: any): string {
-   let sdp = `v=0
+export function generateSDP(
+  ip: string,
+  audioPort: number | null,
+  videoPort: number | null,
+  audioCodec: any,
+  videoCodec: any
+): string {
+  let sdp = `v=0
 o=- 0 0 IN IP4 ${ip}
 s=Mediasoup
 c=IN IP4 ${ip}
 t=0 0
+a=rtcp-mux
 `;
 
   if (audioPort && audioCodec) {
     sdp += `m=audio ${audioPort} RTP/AVP ${audioCodec.payloadType}
-a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}/${audioCodec.channels}
+a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split("/")[1]}/${
+      audioCodec.clockRate
+    }/${audioCodec.channels}
 a=recvonly
 `;
   }
 
   if (videoPort && videoCodec) {
     sdp += `m=video ${videoPort} RTP/AVP ${videoCodec.payloadType}
-a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split('/')[1]}/${videoCodec.clockRate}
+a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split("/")[1]}/${
+      videoCodec.clockRate
+    }
 a=recvonly
 `;
   }

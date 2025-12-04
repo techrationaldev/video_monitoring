@@ -470,6 +470,11 @@ export class ClientWebRTC {
     close() {
         console.log('[CLIENT] Closing client...');
 
+        // Send stop-stream signal to server
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.send({ action: 'stop-stream', roomId: this.roomId });
+        }
+
         // Stop producers
         this.producers.forEach((producer) => {
             producer.close();

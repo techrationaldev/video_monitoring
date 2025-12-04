@@ -17,6 +17,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
  * @property {string} turnPassword - Password for TURN authentication.
  * @property {string} laravelApiUrl - URL of the Laravel backend API.
  * @property {string} internalApiSecret - Secret key for internal API communication with Laravel.
+ * @property {string} recordingServiceUrl - URL of the Recording Service (default: "http://localhost:4000").
  */
 export const config = {
   listenIp: process.env.LISTEN_IP || "0.0.0.0",
@@ -29,4 +30,6 @@ export const config = {
   turnPassword: process.env.TURN_PASSWORD || "pass",
   laravelApiUrl: process.env.LARAVEL_API_URL || "http://127.0.0.1:8000/api",
   internalApiSecret: process.env.INTERNAL_API_SECRET || "",
+  recordingServiceUrl:
+    process.env.RECORDING_SERVICE_URL || "http://localhost:4000",
 } as const;

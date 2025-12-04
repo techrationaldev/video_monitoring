@@ -34,7 +34,7 @@ class RecordingController extends Controller
         }
 
         if ($request->has('room_name')) {
-            $query->whereHas('room', function($q) use ($request) {
+            $query->whereHas('room', function ($q) use ($request) {
                 $q->where('name', $request->room_name);
             });
         }
@@ -78,7 +78,7 @@ class RecordingController extends Controller
      */
     public function stop(Request $request): JsonResponse
     {
-         $data = $request->validate([
+        $data = $request->validate([
             'roomId' => 'required', // Room Name
         ]);
 
@@ -91,7 +91,7 @@ class RecordingController extends Controller
             'roomId' => $data['roomId']
         ]);
 
-         if ($response->failed()) {
+        if ($response->failed()) {
             return response()->json(['error' => 'Failed to stop recording', 'details' => $response->body()], 500);
         }
 
@@ -124,20 +124,23 @@ class RecordingController extends Controller
                     return response()->json(['error' => 'Room not found'], 404);
                 }
 
+                $duration = $request->input('duration', 0);
+                $startedAt = now()->subSeconds($duration);
+
                 Recording::create([
                     'room_id' => $room->id,
                     'file_path' => $request->input('filePath'),
-                    'duration' => $request->input('duration'),
-                    'size' => $request->input('size'),
-                    'started_at' => now()->subSeconds($request->input('duration')),
+                    'duration' => $duration,
+                    'size' => $request->input('size', 0),
+                    'started_at' => $startedAt,
                     'ended_at' => now(),
-                    // 'resolution' => '720p', // Default
                 ]);
 
                 Log::info("Recording saved for room: $roomId");
             } catch (\Exception $e) {
-                Log::error("Failed to save recording: " . $e->getMessage());
-                return response()->json(['error' => 'Database error'], 500);
+                Log::error("Failed to save recording for room $roomId. Error: " . $e->getMessage());
+                Log::error("Trace: " . $e->getTraceAsString());
+                return response()->json(['error' => 'Database error: ' + $e->getMessage()], 500);
             }
         } elseif ($event === 'recording.failed') {
             Log::error("Recording failed for room $roomId: " . $request->input('error'));

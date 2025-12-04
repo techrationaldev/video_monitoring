@@ -80,7 +80,7 @@ console.log(`[SERVER] WS running on port ${config.serverPort}`);
 
 // Start API Server
 apiServer.listen(3001, () => {
-    console.log(`[SERVER] API listening on port 3001`);
+  console.log(`[SERVER] API listening on port 3001`);
 });
 
 /**
@@ -523,48 +523,67 @@ wss.on("connection", (ws: WebSocket, req) => {
         // Recording Service throws if active.
 
         // We only trigger if this is a streamer producing.
-        if (room.getProducers().length === 1 || room.getProducers().length === 2) {
-             // Try to start recording
-             // Ideally we wait for both audio/video, but we can start whenever.
-             // If we start now, and video comes later, we might miss it if SDP is generated only once?
-             // YES. Standard FFmpeg needs to know all streams upfront in SDP usually.
+        if (
+          room.getProducers().length === 1 ||
+          room.getProducers().length === 2
+        ) {
+          // Try to start recording
+          // Ideally we wait for both audio/video, but we can start whenever.
+          // If we start now, and video comes later, we might miss it if SDP is generated only once?
+          // YES. Standard FFmpeg needs to know all streams upfront in SDP usually.
 
-             // So we should wait until we have what we expect.
-             // Typically a streamer publishes audio and video.
-             // Let's debounce or wait a bit?
-             // Or just trigger it and if it fails (already active), ignore.
-             // BUT, if we trigger on Audio, and Video comes 100ms later, the Recording Service
-             // will have started with ONLY Audio in SDP.
-             // Mediasoup recording usually requires updating the subscription or restarting?
-             // FFmpeg cannot dynamically add streams easily without complex restart.
+          // So we should wait until we have what we expect.
+          // Typically a streamer publishes audio and video.
+          // Let's debounce or wait a bit?
+          // Or just trigger it and if it fails (already active), ignore.
+          // BUT, if we trigger on Audio, and Video comes 100ms later, the Recording Service
+          // will have started with ONLY Audio in SDP.
+          // Mediasoup recording usually requires updating the subscription or restarting?
+          // FFmpeg cannot dynamically add streams easily without complex restart.
 
-             // Simple fix: Wait for a short period or check if we have both?
-             // Or assume we always have both?
-             // Let's just trigger. If we miss video, we miss video.
-             // Ideally the client sends both rapidly.
+          // Simple fix: Wait for a short period or check if we have both?
+          // Or assume we always have both?
+          // Let's just trigger. If we miss video, we miss video.
+          // Ideally the client sends both rapidly.
 
-             // Better: Client (Streamer) sends "start-recording" action?
-             // OR: We wait for 2 seconds after first produce?
+          // Better: Client (Streamer) sends "start-recording" action?
+          // OR: We wait for 2 seconds after first produce?
 
-             setTimeout(async () => {
-                 try {
-                     const currentProducers = room.getProducers();
-                     // Only start if we haven't already (check room state?)
-                     // Room class doesn't track "recording status" easily other than transports.
-                     if (room.recordingTransports.size === 0 && currentProducers.length > 0) {
-                        console.log(`[SERVER] Triggering auto-recording for room ${roomId}`);
-                        await axios.post('http://localhost:4000/recording/start', {
-                            roomId
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${config.internalApiSecret}`
-                            }
-                        });
-                     }
-                 } catch (err: any) {
-                     console.error(`[SERVER] Failed to trigger recording: ${err.message}`);
-                 }
-             }, 2000);
+          setTimeout(async () => {
+            try {
+              const currentProducers = room.getProducers();
+              // Only start if we haven't already (check room state?)
+              // Room class doesn't track "recording status" easily other than transports.
+              console.log(
+                `[SERVER] Checking auto-recording trigger: Transports=${room.recordingTransports.size}, Producers=${currentProducers.length}, IsRecording=${room.isRecording}`
+              );
+              if (
+                room.recordingTransports.size === 0 &&
+                currentProducers.length > 0 &&
+                !room.isRecording
+              ) {
+                room.isRecording = true;
+                console.log(
+                  `[SERVER] Triggering auto-recording for room ${roomId}`
+                );
+                await axios.post(
+                  `${config.recordingServiceUrl}/recording/start`,
+                  {
+                    roomId,
+                  },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${config.internalApiSecret}`,
+                    },
+                  }
+                );
+              }
+            } catch (err: any) {
+              console.error(
+                `[SERVER] Failed to trigger recording: ${err.message}`
+              );
+            }
+          }, 2000);
         }
 
         // Notify other clients (Viewers) about the new producer
@@ -642,6 +661,108 @@ wss.on("connection", (ws: WebSocket, req) => {
           }
         }
       }
+
+      if (action === "stop-stream") {
+        // The client sends { action: 'stop-stream', roomId: '...', clientId: '...' }
+        // So roomId and clientId are at the top level, NOT in 'data'.
+        // However, we parsed the message into { action, data } earlier.
+        // Let's re-parse or access the raw properties if possible, but 'data' variable comes from destructuring.
+        // We need to check if 'data' contains them or if they are on the root object.
+        // Looking at client.ts: this.send({ action: 'stop-stream', roomId: this.roomId });
+        // And send() does: const msg = { ...data, clientId: this.clientId };
+        // So msg is { action: 'stop-stream', roomId: '...', clientId: '...' }.
+        // BUT index.ts does: const { action, data } = JSON.parse(message);
+        // This destructuring assumes the message structure is { action: '...', data: { ... } }.
+        // If the message is flat, 'data' will be undefined.
+
+        // We should parse the full message to get the flat properties.
+        const fullMessage = JSON.parse(message);
+        const roomId = fullMessage.roomId;
+        const clientId = fullMessage.clientId;
+
+        if (
+          !roomId ||
+          !clientId ||
+          typeof roomId !== "string" ||
+          typeof clientId !== "string"
+        ) {
+          console.error(
+            "[SERVER] Missing or invalid roomId/clientId for stop-stream"
+          );
+          return;
+        }
+        console.log(`[SERVER] Received stop-stream request from ${clientId}`);
+        const room = rooms.get(roomId);
+        if (room) {
+          // 1. Stop Recording immediately
+          if (room.isRecording) {
+            console.log(
+              `[SERVER] Stopping recording for room ${roomId} (User Action)`
+            );
+            axios
+              .post(
+                `${config.recordingServiceUrl}/recording/stop`,
+                {
+                  roomId: roomId,
+                },
+                {
+                  headers: {
+                    Authorization: `Bearer ${config.internalApiSecret}`,
+                  },
+                }
+              )
+              .then((response) => {
+                console.log(
+                  `[SERVER] Recording stopped successfully for room ${roomId}`
+                );
+                if (response.data && response.data.url) {
+                  console.log(`[SERVER] Recording URL: ${response.data.url}`);
+                }
+              })
+              .catch((err) =>
+                console.error(
+                  `[SERVER] Failed to stop recording: ${err.message}`
+                )
+              );
+            room.isRecording = false;
+            room.closeRecordingTransports();
+          }
+
+          // 2. Notify Backend immediately
+          axios
+            .post(
+              `${config.laravelApiUrl}/internal/stream-status`,
+              {
+                roomId: roomId,
+                clientId: clientId,
+                status: "ended",
+              },
+              {
+                headers: { "X-Internal-Secret": config.internalApiSecret },
+              }
+            )
+            .catch((err) =>
+              console.error(`[SERVER] Failed to notify backend: ${err.message}`)
+            );
+
+          // 3. Clear any pending removal timeouts to avoid double processing
+          if (pendingRemovals.has(clientId)) {
+            clearTimeout(pendingRemovals.get(clientId));
+            pendingRemovals.delete(clientId);
+          }
+
+          // 4. Close client connection logic will happen when they disconnect,
+          // but we can preemptively clean up if we want.
+          // For now, let's let the close handler do the cleanup, but we've already handled the critical stuff.
+          // Actually, if we don't remove the client, the close handler will trigger the grace period logic?
+          // No, the close handler checks if client exists.
+
+          // Let's just mark it as handled or remove the client now?
+          // If we remove the client now, the close handler won't find it (or we need to handle that).
+          // Let's force close the socket?
+          ws.close();
+        }
+      }
     } catch (error) {
       console.error("[SERVER] Error handling message:", error);
       console.error("[SERVER] Message content:", message);
@@ -693,6 +814,32 @@ wss.on("connection", (ws: WebSocket, req) => {
           })`
         );
         pendingRemovals.delete(currentClientId!);
+
+        // Stop recording if active
+        const roomForStop = rooms.get(currentRoomId!);
+        if (roomForStop && roomForStop.isRecording) {
+          console.log(
+            `[SERVER] Triggering stop-recording for room ${currentRoomId}`
+          );
+          axios
+            .post(
+              `${config.recordingServiceUrl}/recording/stop`,
+              {
+                roomId: currentRoomId,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${config.internalApiSecret}`,
+                },
+              }
+            )
+            .catch((err) => {
+              console.error(
+                `[SERVER] Failed to stop recording: ${err.message}`
+              );
+            });
+          roomForStop.isRecording = false;
+        }
 
         // Notify Laravel backend that stream ended
         axios

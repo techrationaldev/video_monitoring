@@ -1,0 +1,5 @@
+
+> recording-service@1.0.0 start
+> node dist/main.js
+
+[32minfo[39m: Recording Service listening on port 4000 {"timestamp":"2025-12-03T12:57:48.347Z"}

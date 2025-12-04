@@ -393,19 +393,17 @@ export default function ClientStreamPage() {
     };
 
     const endStream = () => {
-        if (confirm('Are you sure you want to end the stream?')) {
-            if (clientRef) {
-                clientRef.close();
-            }
-
-            // Stop local tracks
-            if (mediaStream) {
-                mediaStream.getTracks().forEach((track) => track.stop());
-            }
-
-            setConnected(false);
-            setIsEnded(true);
+        if (clientRef) {
+            clientRef.close();
         }
+
+        // Stop local tracks
+        if (mediaStream) {
+            mediaStream.getTracks().forEach((track) => track.stop());
+        }
+
+        setConnected(false);
+        setIsEnded(true);
     };
 
     if (isEnded) {
